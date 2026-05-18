@@ -63,10 +63,8 @@ The expected rate-limit shape is:
 Codem/
 ├── AGENTS.md
 ├── README.md
-├── install.sh
 ├── package.json
 ├── package-lock.json
-├── repository.md
 ├── tsconfig.json
 └── src/
     ├── extension.ts
@@ -80,7 +78,6 @@ Important paths:
   timers.
 * `src/metadata.json`: GNOME Shell extension manifest.
 * `src/stylesheet.css`: popup and top-bar styling.
-* `install.sh`: compiles TypeScript and installs extension files.
 * `build/extension.js`: generated build output. Do not commit it.
 
 Installed extension path:
@@ -111,12 +108,6 @@ Build the extension:
 npm run build
 ```
 
-Install locally:
-
-```bash
-bash install.sh
-```
-
 Stream GNOME Shell logs while debugging:
 
 ```bash
@@ -131,12 +122,6 @@ Use the smallest validation step that reasonably covers the change.
 
   ```bash
   npm run build
-  ```
-
-* After changing install behavior or extension runtime files, run:
-
-  ```bash
-  bash install.sh
   ```
 
 * For GNOME runtime issues, inspect:
@@ -210,12 +195,10 @@ Before finishing:
 1. Confirm `git status --short` only shows intended changes, plus any
    pre-existing user modifications.
 2. Run `npm run build` for code changes when feasible.
-3. Run `bash install.sh` after extension runtime or installation changes when
-   feasible.
-4. Update documentation if behavior, setup, interfaces, configuration, or
+3. Update documentation if behavior, setup, interfaces, configuration, or
    outputs changed.
-5. Mention any validation that could not be run because of missing credentials,
+4. Mention any validation that could not be run because of missing credentials,
    GNOME Shell access, network access, external services, or environment
    constraints.
-6. Ensure no generated artifacts, secrets, or temporary files were accidentally
+5. Ensure no generated artifacts, secrets, or temporary files were accidentally
    added to tracked changes.
