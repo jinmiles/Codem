@@ -67,6 +67,11 @@ Codem/
 ├── package-lock.json
 ├── tsconfig.json
 └── src/
+    ├── core/
+    │   ├── constants.ts
+    │   ├── format.ts
+    │   ├── types.ts
+    │   └── usage.ts
     ├── extension.ts
     ├── metadata.json
     └── stylesheet.css
@@ -74,8 +79,10 @@ Codem/
 
 Important paths:
 
-* `src/extension.ts`: main GNOME Shell extension logic, API polling, UI, and
-  timers.
+* `src/core/`: platform-neutral Codex usage types, constants, formatting, and
+  response helpers.
+* `src/extension.ts`: GNOME Shell extension integration, local auth reading,
+  API polling, UI, and timers.
 * `src/metadata.json`: GNOME Shell extension manifest.
 * `src/stylesheet.css`: popup and top-bar styling.
 * `build/extension.js`: generated build output. Do not commit it.
@@ -90,6 +97,8 @@ Installed extension path:
 
 * Use npm as the dependency manager.
 * Use the TypeScript compiler configured by `tsconfig.json`.
+* Compile all TypeScript sources into the single GNOME Shell entry point
+  `build/extension.js`.
 * Keep the generated JavaScript compatible with GNOME Shell's GJS runtime.
 * Keep GNOME legacy compatibility in mind: prefer the existing
   `imports.gi.*` and `imports.ui.*` pattern.
@@ -138,6 +147,13 @@ response.
 
 * Always include `'use strict';` in runtime source where applicable.
 * Follow the existing TypeScript/GJS style in `src/extension.ts`.
+* Put platform-neutral usage parsing, formatting, state, and type definitions
+  under `src/core/`.
+* Keep GNOME-specific APIs such as `imports.gi.*`, `imports.ui.*`, `Gio`, and
+  `Soup` in `src/extension.ts`.
+* Keep the generated GNOME runtime JavaScript lightweight. Avoid adding runtime
+  dependencies, broad framework code, or heavy abstractions to
+  `build/extension.js`.
 * Use `log('[Codem] ...')` for extension log messages.
 * Prefer readable, maintainable code over clever abstractions.
 * Keep comments concise and focused on non-obvious GJS, GNOME Shell, API, or

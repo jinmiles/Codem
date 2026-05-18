@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "description": "Codex usage monitor for GNOME Shell",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "check:size": "node -e \"const fs=require('fs');const limit=64*1024;const size=fs.statSync('build/extension.js').size;if(size>limit){console.error('build/extension.js is '+size+' bytes; limit is '+limit);process.exit(1)}console.log('build/extension.js is '+size+' bytes')\""
   },
   "devDependencies": {
     "typescript": "^5.0.0"

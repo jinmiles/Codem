@@ -5,6 +5,11 @@ Codem is named from **Codex** + **meter**.
 A personal GNOME Shell extension that displays Codex 5-hour and weekly usage
 in the top bar with color-coded states, live countdowns, and a detailed popup.
 
+The codebase keeps platform-neutral usage parsing, formatting, and state logic
+in `src/core/`, while `src/extension.ts` contains the GNOME Shell integration.
+This keeps the current GNOME extension small while leaving room for future
+macOS, Windows, or other desktop clients to share the same core logic.
+
 ## Features
 
 | Feature           | Description                                                  |
@@ -44,7 +49,8 @@ npm ci
 npm run build
 ```
 
-The compiled extension entry point is written to `build/extension.js`.
+TypeScript compiles all source files into the single GNOME Shell entry point
+`build/extension.js`.
 
 To create a local installable bundle:
 

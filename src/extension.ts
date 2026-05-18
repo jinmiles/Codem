@@ -24,34 +24,8 @@ const PanelMenu = imports.ui.panelMenu;
 const PopupMenu = imports.ui.popupMenu;
 const ByteArray = imports.byteArray;
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-interface WindowData {
-    used_percent: number;
-    limit_window_seconds: number;
-    reset_after_seconds: number;
-    reset_at: number;
-}
-
-interface RateLimit {
-    allowed: boolean;
-    primary_window: WindowData;
-    secondary_window: WindowData;
-}
-
-interface UsageResponse {
-    email: string;
-    plan_type: string;
-    rate_limit: RateLimit;
-}
-
-interface ColorState {
-    threshold: number;
-    bg: string;
-    fg: string;
-    label: string;
-}
+type WindowData = CodemCore.WindowData;
+type UsageResponse = CodemCore.UsageResponse;
 
 interface SectionWidgets {
     item: any;
@@ -65,67 +39,11 @@ interface SectionWidgets {
 // Constants
 // ---------------------------------------------------------------------------
 const AUTH_PATH    = GLib.get_home_dir() + '/.codex/auth.json';
-const USAGE_URL    = 'https://chatgpt.com/backend-api/wham/usage';
 const POLL_SECONDS = 60;
 const TICK_SECONDS = 1;
 const BAR_WIDTH_PX = 266;  // must match .codem-bar-outer width in CSS
 const PILL_WIDTH_PX = 112;
 const PILL_LABEL_WIDTH_PX = 32;
-
-const COLOR_STATES: ColorState[] = [
-    { threshold: 60,  bg: '#3fb950', fg: '#3fb950', label: 'ok'       },  // emerald
-    { threshold: 80,  bg: '#818cf8', fg: '#818cf8', label: 'warning'  },  // soft indigo
-    { threshold: 95,  bg: '#fb923c', fg: '#fb923c', label: 'critical' },  // orange
-    { threshold: 101, bg: '#f87171', fg: '#f87171', label: 'depleted' },  // rose
-];
-
-// Dark tinted pill backgrounds matching each state
-const PILL_BG: Record<string, string> = {
-    ok:       '#0d2b1f',
-    warning:  '#1a1848',
-    critical: '#2d1505',
-    depleted: '#2d0f0f',
-};
-
-// ---------------------------------------------------------------------------
-// Utilities
-// ---------------------------------------------------------------------------
-function getColorState(pct: number): ColorState {
-    for (const s of COLOR_STATES) {
-        if (pct < s.threshold) return s;
-    }
-    return COLOR_STATES[COLOR_STATES.length - 1];
-}
-
-function formatCountdown(seconds: number): string {
-    if (seconds <= 0) return 'resetting soon';
-    const d = Math.floor(seconds / 86400);
-    const h = Math.floor((seconds % 86400) / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    if (d > 0) return `${d}d ${h}h ${m}m`;
-    if (h > 0) return `${h}h ${m}m`;
-    if (m > 0) return `${m}m ${s}s`;
-    return `${s}s`;
-}
-
-function formatResetTime(unixTs: number): string {
-    const reset   = new Date(unixTs * 1000);
-    const now     = new Date();
-    const timeStr = reset.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-    const months  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const days    = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    const dateStr = `${months[reset.getMonth()]} ${reset.getDate()}`;
-
-    // Compare calendar dates (midnight-aligned)
-    const resetDay    = new Date(reset.getFullYear(), reset.getMonth(), reset.getDate()).getTime();
-    const todayDay    = new Date(now.getFullYear(),   now.getMonth(),   now.getDate()).getTime();
-    const tomorrowDay = todayDay + 86400000;
-
-    if (resetDay === todayDay)    return `Today, ${dateStr}  ${timeStr}`;
-    if (resetDay === tomorrowDay) return `Tomorrow, ${dateStr}  ${timeStr}`;
-    return `${days[reset.getDay()]}, ${dateStr}  ${timeStr}`;
-}
 
 // ---------------------------------------------------------------------------
 // Indicator
@@ -149,6 +67,7 @@ class CodemIndicator extends PanelMenu.Button {
     _pill: any                        = null;
     _pillIcon: any                    = null;
     _pillSep: any                     = null;
+    _destroyed: boolean               = false;
 
     _init() {
         super._init(0.0, 'Codem', false);
@@ -310,22 +229,30 @@ class CodemIndicator extends PanelMenu.Button {
     }
 
     _fetchUsage() {
-        let authData: any;
+        if (this._destroyed) return;
+
+        let authData: CodemCore.AuthData;
         try { authData = this._readAuth(); }
         catch (e: any) { this._setError(`auth: ${e.message}`); return; }
 
-        const token = authData && authData.tokens && authData.tokens.access_token;
+        const token = CodemCore.extractAccessToken(authData);
         if (!token) { this._setError('access_token not found'); return; }
 
-        const message = Soup.Message.new('GET', USAGE_URL);
+        const message = Soup.Message.new('GET', CodemCore.USAGE_URL);
         message.request_headers.replace('Authorization', `Bearer ${token}`);
         message.request_headers.replace('Content-Type',  'application/json');
         message.request_headers.replace('User-Agent',    'Codem/1.0');
 
         this._session.queue_message(message, (_sess: any, msg: any) => {
+            if (this._destroyed) return;
+
             try {
                 if (msg.status_code !== 200) { this._setError(`HTTP ${msg.status_code}`); return; }
-                const data: UsageResponse = JSON.parse(msg.response_body.data);
+                const data = JSON.parse(msg.response_body.data);
+                if (!CodemCore.isUsageResponse(data)) {
+                    this._setError('unexpected response');
+                    return;
+                }
                 this._data = data;
                 this._onDataReceived(data);
             } catch (e: any) {
@@ -334,7 +261,7 @@ class CodemIndicator extends PanelMenu.Button {
         });
     }
 
-    _readAuth(): any {
+    _readAuth(): CodemCore.AuthData {
         const file = Gio.File.new_for_path(AUTH_PATH);
         const [ok, contents] = file.load_contents(null);
         if (!ok) throw new Error('cannot read file');
@@ -348,7 +275,7 @@ class CodemIndicator extends PanelMenu.Button {
     // UI update
     // -----------------------------------------------------------------------
     _onDataReceived(data: UsageResponse) {
-        const rl = data.rate_limit || ({} as RateLimit);
+        const rl = data.rate_limit || ({} as CodemCore.RateLimit);
         const pw = rl.primary_window;
         const sw = rl.secondary_window;
         if (!pw || !sw) { this._setError('unexpected response'); return; }
@@ -361,8 +288,8 @@ class CodemIndicator extends PanelMenu.Button {
 
     _updatePill(pw: WindowData, sw: WindowData) {
         const pct   = Math.max(pw.used_percent, sw.used_percent);
-        const state = getColorState(pct);
-        const pillBg = PILL_BG[state.label] || '#0d1117';
+        const state = CodemCore.getColorState(pct);
+        const pillBg = CodemCore.PILL_BG[state.label] || '#0d1117';
 
         this._labelPrimary.set_text(`${pw.used_percent}%`);
         this._labelSecondary.set_text(`${sw.used_percent}%`);
@@ -398,7 +325,7 @@ class CodemIndicator extends PanelMenu.Button {
 
     _updateSection(section: SectionWidgets, win: WindowData) {
         const pct    = win.used_percent;
-        const state  = getColorState(pct);
+        const state  = CodemCore.getColorState(pct);
         const fillPx = Math.max(2, Math.round((pct / 100) * BAR_WIDTH_PX));
 
         section.pctLabel.set_text(`${pct}%`);
@@ -407,11 +334,13 @@ class CodemIndicator extends PanelMenu.Button {
         section.barFill.set_width(fillPx);
         section.barFill.set_style(`background-color:${state.bg};border-radius:2px;height:4px;`);
 
-        section.countdownLabel.set_text(`Resets in ${formatCountdown(win.reset_after_seconds)}`);
-        section.resetAtLabel.set_text(`at ${formatResetTime(win.reset_at)}`);
+        section.countdownLabel.set_text(`Resets in ${CodemCore.formatCountdown(win.reset_after_seconds)}`);
+        section.resetAtLabel.set_text(`at ${CodemCore.formatResetTime(win.reset_at)}`);
     }
 
     _setError(msg: string) {
+        if (this._destroyed) return;
+
         this._labelPrimary.set_text('ERR');
         this._labelSecondary.set_text('—');
         this._pill.set_style('background-color:#160505;border-radius:100px;padding:2px 10px 2px 7px;');
@@ -428,6 +357,7 @@ class CodemIndicator extends PanelMenu.Button {
     // -----------------------------------------------------------------------
     _startPolling() {
         this._pollTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, POLL_SECONDS, () => {
+            if (this._destroyed) return GLib.SOURCE_REMOVE;
             this._fetchUsage();
             return GLib.SOURCE_CONTINUE;
         });
@@ -435,14 +365,15 @@ class CodemIndicator extends PanelMenu.Button {
 
     _startTick() {
         this._tickTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, TICK_SECONDS, () => {
+            if (this._destroyed) return GLib.SOURCE_REMOVE;
             if (this._primaryLeft   > 0) this._primaryLeft--;
             if (this._secondaryLeft > 0) this._secondaryLeft--;
             if (this.menu.isOpen && this._data) {
                 this._primarySection.countdownLabel.set_text(
-                    `Resets in ${formatCountdown(this._primaryLeft)}`
+                    `Resets in ${CodemCore.formatCountdown(this._primaryLeft)}`
                 );
                 this._secondarySection.countdownLabel.set_text(
-                    `Resets in ${formatCountdown(this._secondaryLeft)}`
+                    `Resets in ${CodemCore.formatCountdown(this._secondaryLeft)}`
                 );
             }
             return GLib.SOURCE_CONTINUE;
@@ -455,6 +386,7 @@ class CodemIndicator extends PanelMenu.Button {
     }
 
     destroy() {
+        this._destroyed = true;
         this._stopTimers();
         if (this._session) { this._session.abort(); this._session = null; }
         super.destroy();

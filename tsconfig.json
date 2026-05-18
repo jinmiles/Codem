@@ -1,13 +1,19 @@
 {
   "compilerOptions": {
     "target": "ES2018",
-    "module": "commonjs",
+    "module": "none",
     "strict": false,
     "noImplicitAny": false,
-    "outDir": "build",
-    "removeComments": false,
+    "outFile": "build/extension.js",
+    "removeComments": true,
     "lib": ["ES2018"]
   },
-  "include": ["src/**/*.ts"],
+  "files": [
+    "src/core/types.ts",
+    "src/core/constants.ts",
+    "src/core/format.ts",
+    "src/core/usage.ts",
+    "src/extension.ts"
+  ],
   "exclude": ["node_modules"]
 }
