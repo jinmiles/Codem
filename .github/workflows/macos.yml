@@ -27,6 +27,9 @@ jobs:
       - name: Build macOS menu bar app
         run: swift build -c release --package-path macos
 
+      - name: Run macOS self-test
+        run: macos/.build/release/CodemMac --self-test
+
       - name: Read package version
         id: package
         run: |

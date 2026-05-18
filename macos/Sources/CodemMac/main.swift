@@ -5,6 +5,18 @@ private let usageURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")
 private let pollSeconds: TimeInterval = 60
 private let tickSeconds: TimeInterval = 1
 
+private func formatCountdown(_ seconds: Int) -> String {
+    if seconds <= 0 { return "resetting soon" }
+    let days = seconds / 86400
+    let hours = (seconds % 86400) / 3600
+    let minutes = (seconds % 3600) / 60
+    let secs = seconds % 60
+    if days > 0 { return "\(days)d \(hours)h \(minutes)m" }
+    if hours > 0 { return "\(hours)h \(minutes)m" }
+    if minutes > 0 { return "\(minutes)m \(secs)s" }
+    return "\(secs)s"
+}
+
 private struct AuthData: Decodable {
     struct Tokens: Decodable {
         let accessToken: String?
@@ -224,18 +236,6 @@ private final class CodemMacApp: NSObject, NSApplicationDelegate {
         updatedItem.title = "Updated: --"
     }
 
-    private func formatCountdown(_ seconds: Int) -> String {
-        if seconds <= 0 { return "resetting soon" }
-        let days = seconds / 86400
-        let hours = (seconds % 86400) / 3600
-        let minutes = (seconds % 3600) / 60
-        let secs = seconds % 60
-        if days > 0 { return "\(days)d \(hours)h \(minutes)m" }
-        if hours > 0 { return "\(hours)h \(minutes)m" }
-        if minutes > 0 { return "\(minutes)m \(secs)s" }
-        return "\(secs)s"
-    }
-
     @objc private func quit() {
         NSApp.terminate(nil)
     }
@@ -246,6 +246,50 @@ private final class CodemMacApp: NSObject, NSApplicationDelegate {
         formatter.dateFormat = "HH:mm:ss"
         return formatter
     }()
+}
+
+private enum CodemMac {
+    static func runSelfTest() throws {
+        let authJSON = #"{"tokens":{"access_token":"test-token"}}"#.data(using: .utf8)!
+        let auth = try JSONDecoder().decode(AuthData.self, from: authJSON)
+        precondition(auth.tokens?.accessToken == "test-token")
+
+        let usageJSON = """
+        {
+          "email": "test@example.com",
+          "plan_type": "plus",
+          "rate_limit": {
+            "allowed": true,
+            "primary_window": {
+              "used_percent": 73,
+              "reset_after_seconds": 13046,
+              "reset_at": 1779089766
+            },
+            "secondary_window": {
+              "used_percent": 11,
+              "reset_after_seconds": 599846,
+              "reset_at": 1779676566
+            }
+          }
+        }
+        """.data(using: .utf8)!
+        let usage = try JSONDecoder().decode(UsageResponse.self, from: usageJSON)
+        precondition(usage.rateLimit.primaryWindow.usedPercent == 73)
+        precondition(usage.rateLimit.secondaryWindow.usedPercent == 11)
+        precondition(formatCountdown(65) == "1m 5s")
+        precondition(formatCountdown(0) == "resetting soon")
+    }
+}
+
+if CommandLine.arguments.contains("--self-test") {
+    do {
+        try CodemMac.runSelfTest()
+        print("CodemMac self-test passed")
+        exit(0)
+    } catch {
+        fputs("CodemMac self-test failed: \(error)\n", stderr)
+        exit(1)
+    }
 }
 
 private let app = NSApplication.shared
