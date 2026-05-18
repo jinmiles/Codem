@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, State, Window, WindowEvent};
 use usage::{build_error_snapshot, build_loading_snapshot, fetch_usage_snapshot, UsageSnapshot};
 
 const POLL_SECONDS: u64 = 60;
@@ -133,7 +133,7 @@ fn show_main_window(app: &AppHandle) {
     }
 }
 
-fn hide_window(window: &WebviewWindow) {
+fn hide_window(window: &Window) {
     let _ = window.hide();
 }
 

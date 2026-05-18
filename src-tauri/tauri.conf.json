@@ -28,6 +28,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "icon": ["icons/icon.png"],
     "category": "Utility",
     "shortDescription": "Codex usage meter",
     "longDescription": "Codem is a lightweight cross-platform desktop meter for Codex usage."
