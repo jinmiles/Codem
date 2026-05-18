@@ -69,6 +69,8 @@ const USAGE_URL    = 'https://chatgpt.com/backend-api/wham/usage';
 const POLL_SECONDS = 60;
 const TICK_SECONDS = 1;
 const BAR_WIDTH_PX = 266;  // must match .codem-bar-outer width in CSS
+const PILL_WIDTH_PX = 112;
+const PILL_LABEL_WIDTH_PX = 32;
 
 const COLOR_STATES: ColorState[] = [
     { threshold: 60,  bg: '#3fb950', fg: '#3fb950', label: 'ok'       },  // emerald
@@ -164,6 +166,7 @@ class CodemIndicator extends PanelMenu.Button {
     // -----------------------------------------------------------------------
     _buildPill() {
         this._pill = new St.BoxLayout({ style_class: 'codem-pill', vertical: false, reactive: true });
+        this._pill.set_width(PILL_WIDTH_PX);
         this.add_child(this._pill);
 
         // Symbolic icon — represents a usage monitor / activity
@@ -180,6 +183,7 @@ class CodemIndicator extends PanelMenu.Button {
             style_class: 'codem-label',
             y_align: Clutter.ActorAlign.CENTER,
         });
+        this._labelPrimary.set_width(PILL_LABEL_WIDTH_PX);
         this._pill.add_child(this._labelPrimary);
 
         // Separator
@@ -196,6 +200,7 @@ class CodemIndicator extends PanelMenu.Button {
             style_class: 'codem-label',
             y_align: Clutter.ActorAlign.CENTER,
         });
+        this._labelSecondary.set_width(PILL_LABEL_WIDTH_PX);
         this._pill.add_child(this._labelSecondary);
     }
 
@@ -240,7 +245,7 @@ class CodemIndicator extends PanelMenu.Button {
         this._primarySection   = this._makeSectionItem('5H LIMIT');
         this.menu.addMenuItem(this._primarySection.item);
 
-        this._secondarySection = this._makeSectionItem('7-DAY LIMIT');
+        this._secondarySection = this._makeSectionItem('WEEKLY LIMIT');
         this.menu.addMenuItem(this._secondarySection.item);
 
         // ── Account info at bottom ──

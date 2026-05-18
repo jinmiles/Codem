@@ -1,5 +1,7 @@
 # Build output
 build/
+dist/
+release/
 
 # Node
 node_modules/

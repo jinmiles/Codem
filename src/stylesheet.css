@@ -5,6 +5,7 @@
 /* -- Top-bar pill ---------------------------------------------------------- */
 
 .codem-pill {
+    width: 112px;
     border-radius: 100px;
     padding: 2px 10px 2px 7px;
     margin: 4px 2px;
@@ -21,6 +22,7 @@
 }
 
 .codem-label {
+    width: 32px;
     font-size: 11px;
     font-weight: bold;
     color: #c9d1d9;

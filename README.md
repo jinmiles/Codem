@@ -1,5 +1,7 @@
 # Codem - Codex Usage Monitor
 
+Codem is named from **Codex** + **meter**.
+
 A personal GNOME Shell extension that displays Codex 5-hour and weekly usage
 in the top bar with color-coded states, live countdowns, and a detailed popup.
 
@@ -20,62 +22,37 @@ in the top bar with color-coded states, live countdowns, and a detailed popup.
 
 ## Installation
 
+Download `codem-v{version}.zip` from the GitHub Release page, then install it into
+GNOME Shell:
+
 ```bash
-cd ~/extra_workdir/Codem
-bash install.sh
+gnome-extensions install --force codem-v{version}.zip
+gnome-extensions enable codem@jinmiles.github.io
 ```
+
+Replace `{version}` with the release version, for example `0.1.0`.
 
 Then restart GNOME Shell:
 
 - **X11:** `Alt + F2` -> type `r` -> `Enter`
 - **Wayland:** log out and log back in
 
-## Color states
-
-```
-used_percent   state       background
------------    ---------   ----------
-  0 - 59%      ok          #1a9e5f  (green)
- 60 - 79%      warning     #d97706  (amber)
- 80 - 94%      critical    #dc2626  (red)
- 95 - 100%     depleted    #7f1d1d  (dark red)
-```
-
-The pill background and popup percentage labels change automatically based
-on the higher of the two window percentages.
-
-## Auth file format
-
-`~/.codex/auth.json`:
-```json
-{
-  "auth_mode": "chatgpt",
-  "tokens": {
-    "access_token": "...",
-    "id_token": "...",
-    "refresh_token": "...",
-    "account_id": "..."
-  },
-  "last_refresh": "2026-05-14T07:40:07Z"
-}
-```
-
-## Debugging
+## Build From Source
 
 ```bash
-# Stream GNOME Shell logs and filter to Codem output
-journalctl -f -o cat /usr/bin/gnome-shell | grep -i codem
+npm ci
+npm run build
 ```
 
-## File structure
+The compiled extension entry point is written to `build/extension.js`.
 
-```
-Codem/
-├── install.sh
-├── README.md
-├── AGENTS.md
-└── src/
-    ├── metadata.json    extension manifest
-    ├── extension.js     core logic (API, UI, timers)
-    └── stylesheet.css   styles (pill, popup layout)
+To create a local installable bundle:
+
+```bash
+version="$(node -p "require('./package.json').version")"
+mkdir -p dist/codem release
+cp build/extension.js dist/codem/extension.js
+cp src/metadata.json dist/codem/metadata.json
+cp src/stylesheet.css dist/codem/stylesheet.css
+(cd dist/codem && zip -r "../../release/codem-v$version.zip" .)
 ```
