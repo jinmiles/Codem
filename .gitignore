@@ -2,6 +2,7 @@
 build/
 dist/
 release/
+macos/.build/
 
 # Node
 node_modules/

@@ -4,10 +4,10 @@ Instructions for AI coding agents working in this repository.
 
 ## Mission
 
-Codem is a personal GNOME Shell extension that monitors Codex usage in real
-time from the GNOME top bar. Preserve GNOME Shell compatibility, the extension
-installation workflow, and the Codex usage display behavior while keeping
-changes small and easy to validate.
+Codem is a lightweight desktop usage meter that monitors Codex usage in real
+time from the system status area. Preserve GNOME Shell compatibility, macOS
+menu bar behavior, installation workflows, and the Codex usage display behavior
+while keeping changes small and easy to validate.
 
 ## Ground Rules
 
@@ -66,6 +66,9 @@ Codem/
 ├── package.json
 ├── package-lock.json
 ├── tsconfig.json
+├── macos/
+│   ├── Package.swift
+│   └── Sources/CodemMac/main.swift
 └── src/
     ├── core/
     │   ├── constants.ts
@@ -83,6 +86,7 @@ Important paths:
   response helpers.
 * `src/extension.ts`: GNOME Shell extension integration, local auth reading,
   API polling, UI, and timers.
+* `macos/`: native Swift/AppKit macOS menu bar app.
 * `src/metadata.json`: GNOME Shell extension manifest.
 * `src/stylesheet.css`: popup and top-bar styling.
 * `build/extension.js`: generated build output. Do not commit it.
@@ -99,9 +103,12 @@ Installed extension path:
 * Use the TypeScript compiler configured by `tsconfig.json`.
 * Compile all TypeScript sources into the single GNOME Shell entry point
   `build/extension.js`.
+* Use Swift Package Manager for the native macOS app.
 * Keep the generated JavaScript compatible with GNOME Shell's GJS runtime.
 * Keep GNOME legacy compatibility in mind: prefer the existing
   `imports.gi.*` and `imports.ui.*` pattern.
+* Keep the macOS runtime native and lightweight. Do not introduce Electron or
+  other large desktop runtimes without explicit user approval.
 
 ## Common Commands
 
@@ -115,6 +122,12 @@ Build the extension:
 
 ```bash
 npm run build
+```
+
+Build the macOS menu bar app:
+
+```bash
+swift build --package-path macos
 ```
 
 Stream GNOME Shell logs while debugging:
@@ -131,6 +144,12 @@ Use the smallest validation step that reasonably covers the change.
 
   ```bash
   npm run build
+  ```
+
+* For macOS app changes, run on macOS when feasible:
+
+  ```bash
+  swift build --package-path macos
   ```
 
 * For GNOME runtime issues, inspect:
@@ -151,6 +170,8 @@ response.
   under `src/core/`.
 * Keep GNOME-specific APIs such as `imports.gi.*`, `imports.ui.*`, `Gio`, and
   `Soup` in `src/extension.ts`.
+* Keep macOS-specific APIs such as `AppKit`, `NSStatusBar`, and `URLSession`
+  under `macos/`.
 * Keep the generated GNOME runtime JavaScript lightweight. Avoid adding runtime
   dependencies, broad framework code, or heavy abstractions to
   `build/extension.js`.
@@ -167,7 +188,8 @@ response.
 
 ## UI And Behavior
 
-* The top-bar indicator should remain compact and readable.
+* The GNOME top-bar indicator and macOS menu bar item should remain compact and
+  readable.
 * The extension displays both 5-hour and weekly usage percentages.
 * Color and state logic should stay consistent across the pill, popup labels,
   and progress bars.

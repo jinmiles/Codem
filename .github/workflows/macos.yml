@@ -1,0 +1,101 @@
+name: macOS
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build macOS menu bar app
+        run: swift build -c release --package-path macos
+
+      - name: Read package version
+        id: package
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Validate tag version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          package_version="${{ steps.package.outputs.version }}"
+          if [ "$tag_version" != "$package_version" ]; then
+            echo "Tag version v$tag_version does not match package version $package_version"
+            exit 1
+          fi
+
+      - name: Package macOS app
+        run: |
+          package_name="codem-macos-v${{ steps.package.outputs.version }}"
+          app_dir="release/Codem.app"
+          mkdir -p "$app_dir/Contents/MacOS"
+          cp macos/.build/release/CodemMac "$app_dir/Contents/MacOS/Codem"
+          chmod +x "$app_dir/Contents/MacOS/Codem"
+          cat > "$app_dir/Contents/Info.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>Codem</string>
+              <key>CFBundleIdentifier</key>
+              <string>io.github.jinmiles.codem</string>
+              <key>CFBundleName</key>
+              <string>Codem</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>${{ steps.package.outputs.version }}</string>
+              <key>CFBundleVersion</key>
+              <string>${{ steps.package.outputs.version }}</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>12.0</string>
+              <key>LSUIElement</key>
+              <true/>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+          cd release
+          zip -r "$package_name.zip" Codem.app
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codem-macos-v${{ steps.package.outputs.version }}
+          path: release/*.zip
+
+      - name: Upload macOS release asset
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for _ in 1 2 3 4 5 6 7 8 9 10; do
+            if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+              gh release upload "$GITHUB_REF_NAME" release/*.zip --clobber
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Release $GITHUB_REF_NAME was not available for asset upload"
+          exit 1
