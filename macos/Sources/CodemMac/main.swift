@@ -248,7 +248,7 @@ private final class CodemMacApp: NSObject, NSApplicationDelegate {
     }()
 }
 
-let app = NSApplication.shared
-let delegate = CodemMacApp()
+private let app = NSApplication.shared
+private let delegate = CodemMacApp()
 app.delegate = delegate
 app.run()
