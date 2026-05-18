@@ -1,0 +1,9 @@
+{
+  "uuid": "codem@jinmiles.github.io",
+  "name": "Codem",
+  "description": "Codex usage monitor - displays 5-hour and weekly Codex usage in the top bar.",
+  "version": 1,
+  "shell-version": ["3.36", "3.38", "40", "41", "42", "43", "44", "45", "46", "47"],
+  "url": "https://github.com/jinmiles/codem",
+  "gettext-domain": "codem@jinmiles.github.io"
+}

@@ -1,0 +1,138 @@
+/* --------------------------------------------------------------------------
+   Codem - stylesheet.css  (dark theme)
+   -------------------------------------------------------------------------- */
+
+/* -- Top-bar pill ---------------------------------------------------------- */
+
+.codem-pill {
+    border-radius: 100px;
+    padding: 2px 10px 2px 7px;
+    margin: 4px 2px;
+    background-color: #0d1117;
+    spacing: 0px;
+    transition-duration: 200ms;
+    transition-property: background-color;
+}
+
+.codem-icon {
+    icon-size: 14px;
+    color: #6e7681;
+    margin-right: 5px;
+}
+
+.codem-label {
+    font-size: 11px;
+    font-weight: bold;
+    color: #c9d1d9;
+}
+
+.codem-sep {
+    font-size: 9px;
+    color: rgba(110, 118, 129, 0.4);
+    margin: 0 4px;
+}
+
+/* -- Popup top row --------------------------------------------------------- */
+
+.codem-top-row {
+    padding: 2px 4px;
+    min-width: 300px;
+}
+
+.codem-timestamp {
+    font-size: 11px;
+    color: #6e7681;
+}
+
+.codem-refresh-btn {
+    background-color: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 3px;
+}
+
+.codem-refresh-btn:hover {
+    background-color: rgba(110, 118, 129, 0.12);
+}
+
+.codem-refresh-icon {
+    icon-size: 14px;
+    color: #6e7681;
+}
+
+.codem-refresh-icon:hover {
+    color: #c9d1d9;
+}
+
+/* -- Usage sections -------------------------------------------------------- */
+
+.codem-section-box {
+    spacing: 6px;
+    padding: 10px 12px;
+    background-color: #161b22;
+    border-radius: 8px;
+    margin: 2px 4px;
+    min-width: 300px;
+}
+
+.codem-section-title {
+    font-size: 11px;
+    font-weight: bold;
+    color: #8b949e;
+    letter-spacing: 0.06em;
+}
+
+.codem-section-pct {
+    font-size: 14px;
+    font-weight: bold;
+    color: #3fb950;
+}
+
+/* Progress bar: fixed-width track + colored fill via set_width() */
+.codem-bar-outer {
+    width: 266px;
+    height: 4px;
+    background-color: #21262d;
+    border-radius: 2px;
+}
+
+.codem-bar-fill {
+    height: 4px;
+    border-radius: 2px;
+    background-color: #3fb950;
+}
+
+.codem-countdown {
+    font-size: 11px;
+    color: #6e7681;
+}
+
+.codem-reset-at {
+    font-size: 11px;
+    color: #484f58;
+}
+
+/* -- Account info (bottom) ------------------------------------------------- */
+
+.codem-account-info {
+    font-size: 10.5px;
+    color: #484f58;
+    padding: 2px 4px;
+}
+
+/* -- Popup menu overrides -------------------------------------------------- */
+
+.popup-separator-menu-item {
+    -gradient-height: 1px;
+    -gradient-start: rgba(48, 54, 61, 0.5);
+    -gradient-end: rgba(48, 54, 61, 0.5);
+    -margin-horizontal: 0px;
+}
+
+/* Override the system theme white border on our popup only */
+.codem-popup-container {
+    -arrow-background-color: #0d1117;
+    -arrow-border-color: #30363d;
+    -arrow-border-width: 1px;
+    border-color: #30363d;
+}
