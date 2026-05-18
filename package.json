@@ -1,12 +1,22 @@
 {
   "name": "codem",
   "version": "0.1.0",
-  "description": "Codex usage monitor for desktop status areas",
+  "description": "Cross-platform Codex usage meter",
+  "type": "module",
   "scripts": {
-    "build": "tsc",
-    "check:size": "node -e \"const fs=require('fs');const limit=64*1024;const size=fs.statSync('build/extension.js').size;if(size>limit){console.error('build/extension.js is '+size+' bytes; limit is '+limit);process.exit(1)}console.log('build/extension.js is '+size+' bytes')\""
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc && vite build",
+    "check": "tsc --noEmit",
+    "test": "npm run check && cargo test --manifest-path src-tauri/Cargo.toml",
+    "tauri": "tauri",
+    "tauri:build": "tauri build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.0.0"
+    "@tauri-apps/cli": "^2.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0"
   }
 }

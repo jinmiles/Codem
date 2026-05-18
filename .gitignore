@@ -2,7 +2,7 @@
 build/
 dist/
 release/
-macos/.build/
+src-tauri/target/
 
 # Node
 node_modules/
@@ -10,6 +10,9 @@ npm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
+
+# Rust
+**/*.rs.bk
 
 # OS
 .DS_Store

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Codem",
+  "version": "0.1.0",
+  "identifier": "io.github.jinmiles.codem",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Codem",
+        "width": 420,
+        "height": 560,
+        "minWidth": 360,
+        "minHeight": 520,
+        "resizable": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "shortDescription": "Codex usage meter",
+    "longDescription": "Codem is a lightweight cross-platform desktop meter for Codex usage."
+  }
+}

@@ -1,90 +1,105 @@
-# Codem - Codex Usage Monitor
+# Codem - Codex Usage Meter
 
 Codem is named from **Codex** + **meter**.
 
-A lightweight desktop usage meter that displays Codex 5-hour and weekly usage
-from the system status area.
-
-Codem currently ships a GNOME Shell extension and a native macOS menu bar app.
-The TypeScript codebase keeps platform-neutral usage parsing, formatting, and
-state logic in `src/core/`, while `src/extension.ts` contains the GNOME Shell
-integration. The macOS app lives in `macos/` and uses Swift/AppKit instead of
-Electron so the menu bar runtime stays small.
+Codem is a lightweight cross-platform desktop app that shows Codex 5-hour and
+weekly usage from the system tray or macOS menu bar.
 
 ## Features
 
-| Feature           | Description                                                  |
-|-------------------|--------------------------------------------------------------|
-| Status indicator  | Shows 5-hour and weekly usage percentages at a glance        |
-| Color coding      | OK (green) -> Warning (amber) -> Critical (red) -> Depleted  |
-| Countdown         | Counts down to the next reset in real time (per-second tick) |
-| Detail menu       | Shows reset countdowns, email, plan type, and account status |
-| Auto-refresh      | Polls the API every 60 seconds; manual refresh button        |
+| Feature | Description |
+| --- | --- |
+| Tray-first UI | Runs from the Linux system tray or macOS menu bar |
+| Usage windows | Shows 5-hour and weekly usage percentages |
+| Countdown | Updates reset countdowns locally every second |
+| Auto-refresh | Polls Codex usage every 60 seconds |
+| Manual refresh | Refreshes usage from the app window or tray menu |
 
 ## Requirements
 
-- GNOME Shell 3.36 or later, or macOS 12 or later
-- `~/.codex/auth.json` present (Codex CLI must be logged in)
+- Linux with a working system tray/AppIndicator environment, or macOS 12 or later
+- `~/.codex/auth.json` present
+- Codex CLI logged in so `tokens.access_token` exists in the auth file
 
-## GNOME Installation
+Codem reads:
 
-Download `codem-v{version}.zip` from the GitHub Release page, then install it into
-GNOME Shell:
-
-```bash
-gnome-extensions install --force codem-v{version}.zip
-gnome-extensions enable codem@jinmiles.github.io
+```text
+~/.codex/auth.json
 ```
 
-Replace `{version}` with the release version, for example `0.1.0`.
+and calls:
 
-Then restart GNOME Shell:
+```text
+GET https://chatgpt.com/backend-api/wham/usage
+```
 
-- **X11:** `Alt + F2` -> type `r` -> `Enter`
-- **Wayland:** log out and log back in
+## Install From Release
 
-## GNOME Build From Source
+Download the asset for your platform from the GitHub Release page:
+
+- Linux: `.AppImage` or `.deb`
+- macOS: `.dmg`
+
+Release assets are built from the shared Tauri app. The release version is
+encoded in the generated installer names.
+
+## Build From Source
+
+Install Node.js 20, Rust stable, and the Tauri system dependencies for your
+platform.
+
+Linux build dependencies on Ubuntu:
+
+```bash
+sudo apt-get install -y \
+  libwebkit2gtk-4.1-dev \
+  libappindicator3-dev \
+  librsvg2-dev \
+  patchelf
+```
+
+Then build:
 
 ```bash
 npm ci
 npm run build
+npm run tauri:build
 ```
 
-TypeScript compiles all source files into the single GNOME Shell entry point
-`build/extension.js`.
-
-To create a local installable bundle:
+Run while developing:
 
 ```bash
-version="$(node -p "require('./package.json').version")"
-mkdir -p dist/codem release
-cp build/extension.js dist/codem/extension.js
-cp src/metadata.json dist/codem/metadata.json
-cp src/stylesheet.css dist/codem/stylesheet.css
-(cd dist/codem && zip -r "../../release/codem-v$version.zip" .)
+npm run tauri dev
 ```
 
-## macOS Build From Source
-
-For releases, download `codem-macos-v{version}.zip`, unzip it, and open
-`Codem.app`.
-
-The release app is currently unsigned. If macOS blocks it, open it from Finder
-with **Right click** -> **Open**.
-
-Replace `{version}` with the release version, for example `0.1.0`.
-
-Build the native menu bar app with Swift Package Manager:
+Run tests:
 
 ```bash
-swift build --package-path macos
+npm test
+cargo run --manifest-path src-tauri/Cargo.toml -- --self-test
 ```
 
-Run it directly while developing:
+## Project Structure
 
-```bash
-swift run --package-path macos CodemMac
+```text
+Codem/
+├── src/                    # Vite TypeScript frontend
+├── src-tauri/              # Tauri Rust app
+│   ├── src/lib.rs          # tray, polling, commands
+│   ├── src/main.rs         # app entry point and self-test entry
+│   ├── src/usage.rs        # auth, API, parsing, formatting
+│   └── tauri.conf.json     # Tauri config and bundle targets
+├── .github/workflows/      # Linux/macOS build and release workflow
+├── AGENTS.md
+├── README.md
+├── package.json
+└── tsconfig.json
 ```
 
-The macOS app reads `~/.codex/auth.json`, polls the same Codex usage API, and
-adds a compact `Codem` item to the menu bar.
+## Notes
+
+- Linux tray behavior depends on the desktop environment. GNOME may require an
+  AppIndicator-compatible tray extension.
+- The macOS release is unsigned unless a signing identity is configured outside
+  this repository.
+- Codem does not log auth tokens or raw API payloads.

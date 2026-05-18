@@ -4,39 +4,43 @@ Instructions for AI coding agents working in this repository.
 
 ## Mission
 
-Codem is a lightweight desktop usage meter that monitors Codex usage in real
-time from the system status area. Preserve GNOME Shell compatibility, macOS
-menu bar behavior, installation workflows, and the Codex usage display behavior
-while keeping changes small and easy to validate.
+Codem is a lightweight cross-platform Codex usage meter built with Tauri. It
+reads local Codex auth, polls the Codex usage API, and displays 5-hour plus
+weekly usage from the Linux system tray or macOS menu bar.
 
 ## Ground Rules
 
-* Treat this file as the highest-priority repository guidance after direct user
-  instructions.
-* Read the relevant code before editing. Prefer small, targeted changes that
-  match the existing TypeScript and GJS style.
-* Preserve existing user changes. Check `git status --short` before editing and
-  avoid reverting unrelated modifications.
-* Do not commit generated artifacts, caches, local datasets, binaries, build
-  outputs, temporary files, logs, screenshots, or secrets.
-* Do not commit `node_modules/`, `build/`, `.agent/`, `.vscode/`, or local
-  GNOME/runtime output.
-* Avoid unnecessary dependency installation, dependency upgrades, or changes to
-  lockfiles unless the task requires them.
-* Keep comments, log messages, and user-facing strings in English.
+* Read relevant code before editing.
+* Preserve user changes. Check `git status --short` before editing.
+* Keep comments, logs, and UI strings in English.
 * Do not add emoji to source files.
+* Do not commit generated artifacts, caches, build outputs, binaries, logs,
+  screenshots, local credentials, or secrets.
+* Avoid dependency upgrades unless the task requires them.
+* Keep the runtime small. Do not add Electron, large UI frameworks, or broad
+  background services without explicit user approval.
 
 ## Project Overview
 
-Codem reads the local Codex auth file and calls the Codex usage endpoint:
+Codem reads:
 
-* Auth file: `~/.codex/auth.json`
-* Token path: `tokens.access_token`
-* API endpoint: `GET https://chatgpt.com/backend-api/wham/usage`
-* Display: 5-hour window (`primary_window`) and weekly window
-  (`secondary_window`) usage
+```text
+~/.codex/auth.json
+```
 
-The expected rate-limit shape is:
+Token path:
+
+```text
+tokens.access_token
+```
+
+API endpoint:
+
+```text
+GET https://chatgpt.com/backend-api/wham/usage
+```
+
+Expected usage shape:
 
 ```json
 {
@@ -61,182 +65,105 @@ The expected rate-limit shape is:
 
 ```text
 Codem/
-├── AGENTS.md
-├── README.md
+├── src/                    # Vite TypeScript frontend
+├── src-tauri/              # Tauri Rust desktop app
+│   ├── src/lib.rs          # tray menu, polling loop, Tauri commands
+│   ├── src/main.rs         # entry point and --self-test
+│   ├── src/usage.rs        # auth reading, API fetch, formatting, tests
+│   ├── tauri.conf.json     # app metadata and bundle targets
+│   └── capabilities/       # Tauri desktop permissions
+├── .github/workflows/      # Linux/macOS build and release workflow
 ├── package.json
-├── package-lock.json
 ├── tsconfig.json
-├── macos/
-│   ├── Package.swift
-│   └── Sources/CodemMac/main.swift
-└── src/
-    ├── core/
-    │   ├── constants.ts
-    │   ├── format.ts
-    │   ├── types.ts
-    │   └── usage.ts
-    ├── extension.ts
-    ├── metadata.json
-    └── stylesheet.css
-```
-
-Important paths:
-
-* `src/core/`: platform-neutral Codex usage types, constants, formatting, and
-  response helpers.
-* `src/extension.ts`: GNOME Shell extension integration, local auth reading,
-  API polling, UI, and timers.
-* `macos/`: native Swift/AppKit macOS menu bar app.
-* `src/metadata.json`: GNOME Shell extension manifest.
-* `src/stylesheet.css`: popup and top-bar styling.
-* `build/extension.js`: generated build output. Do not commit it.
-
-Installed extension path:
-
-```text
-~/.local/share/gnome-shell/extensions/codem@jinmiles.github.io/
+├── README.md
+└── AGENTS.md
 ```
 
 ## Environment
 
-* Use npm as the dependency manager.
-* Use the TypeScript compiler configured by `tsconfig.json`.
-* Compile all TypeScript sources into the single GNOME Shell entry point
-  `build/extension.js`.
-* Use Swift Package Manager for the native macOS app.
-* Keep the generated JavaScript compatible with GNOME Shell's GJS runtime.
-* Keep GNOME legacy compatibility in mind: prefer the existing
-  `imports.gi.*` and `imports.ui.*` pattern.
-* Keep the macOS runtime native and lightweight. Do not introduce Electron or
-  other large desktop runtimes without explicit user approval.
+* Use npm for frontend and Tauri CLI dependencies.
+* Use Rust stable for the Tauri backend.
+* Use Tauri v2 APIs.
+* Use Vite for the small TypeScript frontend.
+* Keep platform-specific tray behavior in Rust under `src-tauri/`.
+* Keep frontend code focused on rendering status and sending explicit commands.
 
 ## Common Commands
 
-Install dependencies when needed:
+Install dependencies:
 
 ```bash
 npm ci
 ```
 
-Build the extension:
+Build frontend:
 
 ```bash
 npm run build
 ```
 
-Build the macOS menu bar app:
+Run the app during development:
 
 ```bash
-swift build --package-path macos
+npm run tauri dev
 ```
 
-Stream GNOME Shell logs while debugging:
+Build desktop bundles:
 
 ```bash
-journalctl -f -o cat /usr/bin/gnome-shell
+npm run tauri:build
+```
+
+Run validation:
+
+```bash
+npm test
+cargo run --manifest-path src-tauri/Cargo.toml -- --self-test
 ```
 
 ## Validation
 
-Use the smallest validation step that reasonably covers the change.
+Use the smallest validation that covers the change:
 
-* For TypeScript or extension logic changes, run:
+* Frontend-only change: `npm run check` and `npm run build`
+* Rust backend change: `cargo test --manifest-path src-tauri/Cargo.toml`
+* Tauri integration change: `npm run tauri:build` on Linux/macOS when feasible
+* Release/workflow change: confirm the GitHub Actions run for Linux and macOS
 
-  ```bash
-  npm run build
-  ```
-
-* For macOS app changes, run on macOS when feasible:
-
-  ```bash
-  swift build --package-path macos
-  ```
-
-* For GNOME runtime issues, inspect:
-
-  ```bash
-  journalctl -f -o cat /usr/bin/gnome-shell
-  ```
-
-If validation cannot be run because GNOME Shell, credentials, network access, or
-the local desktop session is unavailable, mention that clearly in the final
-response.
+If validation cannot run because system packages, GNOME/AppIndicator, macOS,
+credentials, or network access are unavailable, state that clearly.
 
 ## Coding Style
 
-* Always include `'use strict';` in runtime source where applicable.
-* Follow the existing TypeScript/GJS style in `src/extension.ts`.
-* Put platform-neutral usage parsing, formatting, state, and type definitions
-  under `src/core/`.
-* Keep GNOME-specific APIs such as `imports.gi.*`, `imports.ui.*`, `Gio`, and
-  `Soup` in `src/extension.ts`.
-* Keep macOS-specific APIs such as `AppKit`, `NSStatusBar`, and `URLSession`
-  under `macos/`.
-* Keep the generated GNOME runtime JavaScript lightweight. Avoid adding runtime
-  dependencies, broad framework code, or heavy abstractions to
-  `build/extension.js`.
-* Use `log('[Codem] ...')` for extension log messages.
-* Prefer readable, maintainable code over clever abstractions.
-* Keep comments concise and focused on non-obvious GJS, GNOME Shell, API, or
-  timer behavior.
-* Prefer structured JSON handling and standard APIs over ad hoc parsing.
-* Keep CLI defaults, configuration behavior, README content, and installation
-  behavior aligned.
-* Preserve the 60-second API polling cadence and 1-second local countdown tick
-  unless the user explicitly asks to change them.
-* Remove polling and tick timers in `disable()`.
+* Keep Rust logic explicit and small.
+* Keep API parsing structured with `serde`.
+* Keep polling at 60 seconds unless the user asks to change it.
+* Keep local countdown display ticking in the frontend once per second.
+* Do not log auth tokens, raw auth files, or raw API payloads.
+* Preserve threshold behavior:
 
-## UI And Behavior
-
-* The GNOME top-bar indicator and macOS menu bar item should remain compact and
-  readable.
-* The extension displays both 5-hour and weekly usage percentages.
-* Color and state logic should stay consistent across the pill, popup labels,
-  and progress bars.
-* Do not expose auth tokens, raw API payloads, or private user data in logs.
-* Keep user-facing labels concise and in English.
+| Range | State |
+| --- | --- |
+| 0-59% | ok |
+| 60-79% | warning |
+| 80-94% | critical |
+| 95%+ | depleted |
 
 ## Git And Commits
 
-* Do not create commits without explicit user confirmation.
-* When a meaningful unit of work is complete, it is acceptable to suggest a
-  commit.
-* Before committing, review `git status --short` and include only intended
-  changes.
-* Do not stage or modify unrelated user work.
+* Do not commit without explicit user confirmation.
+* Before committing, inspect `git status --short`.
+* Stage only intended changes.
 * Write commit messages in English.
-* Prefer concise conventional commit formatting:
+* Prefer concise conventional commits, such as:
 
-  ```text
-  <type>: <description>
-  ```
+```text
+feat: migrate Codem to Tauri
+```
 
-* Recommended commit types: `feat`, `fix`, `refactor`, `docs`, `test`,
-  `chore`, `perf`, `build`, `ci`.
-* Before committing, run the smallest relevant validation step when feasible
-  and mention any validation that could not be run.
+## Safety
 
-## Data And Safety
-
-* Do not expose secrets, tokens, credentials, personal data, or proprietary
-  assets in code, logs, commits, screenshots, or documentation.
-* Never commit real `~/.codex/auth.json` contents.
+* Never commit real Codex auth contents.
 * Use placeholder values in examples.
-* Avoid printing large API payloads or full auth files.
-* Do not make unsupported claims about correctness, safety, performance, or
-  security.
-
-## Change Checklist
-
-Before finishing:
-
-1. Confirm `git status --short` only shows intended changes, plus any
-   pre-existing user modifications.
-2. Run `npm run build` for code changes when feasible.
-3. Update documentation if behavior, setup, interfaces, configuration, or
-   outputs changed.
-4. Mention any validation that could not be run because of missing credentials,
-   GNOME Shell access, network access, external services, or environment
-   constraints.
-5. Ensure no generated artifacts, secrets, or temporary files were accidentally
-   added to tracked changes.
+* Do not make unsupported claims about runtime behavior on desktop environments
+  that were not actually tested.
