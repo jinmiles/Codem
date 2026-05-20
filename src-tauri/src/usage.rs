@@ -7,6 +7,11 @@ use reqwest::header::{ACCEPT, USER_AGENT};
 use serde::{Deserialize, Serialize};
 
 const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
+const USER_AGENT_VALUE: &str = "Codem/0.1.0 Tauri";
+pub const TRAY_LOADING_TITLE: &str = "Codem --";
+const TRAY_ERROR_TITLE: &str = "Codem ERR";
+const PRIMARY_WINDOW_LABEL: &str = "5H LIMIT";
+const SECONDARY_WINDOW_LABEL: &str = "WEEKLY LIMIT";
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -92,7 +97,7 @@ pub async fn fetch_usage_snapshot(client: &reqwest::Client) -> Result<UsageSnaps
         .get(USAGE_URL)
         .bearer_auth(token)
         .header(ACCEPT, "application/json")
-        .header(USER_AGENT, "Codem/0.1.0 Tauri")
+        .header(USER_AGENT, USER_AGENT_VALUE)
         .send()
         .await
         .map_err(|error| format!("request failed: {error}"))?;
@@ -118,7 +123,7 @@ pub fn build_loading_snapshot() -> UsageSnapshot {
         account: None,
         error: None,
         updated_at_unix: None,
-        tray_title: "Codem --".to_string(),
+        tray_title: TRAY_LOADING_TITLE.to_string(),
     }
 }
 
@@ -130,7 +135,7 @@ pub fn build_error_snapshot(error: String) -> UsageSnapshot {
         account: None,
         error: Some(error),
         updated_at_unix: Some(now_unix()),
-        tray_title: "Codem ERR".to_string(),
+        tray_title: TRAY_ERROR_TITLE.to_string(),
     }
 }
 
@@ -175,8 +180,8 @@ pub fn run_self_test() -> Result<(), String> {
 }
 
 fn snapshot_from_usage(usage: UsageResponse) -> UsageSnapshot {
-    let primary = window_from_data("5H LIMIT", usage.rate_limit.primary_window);
-    let secondary = window_from_data("WEEKLY LIMIT", usage.rate_limit.secondary_window);
+    let primary = window_from_data(PRIMARY_WINDOW_LABEL, usage.rate_limit.primary_window);
+    let secondary = window_from_data(SECONDARY_WINDOW_LABEL, usage.rate_limit.secondary_window);
     let tray_title = format!("Codem {}% · {}%", primary.used_percent, secondary.used_percent);
 
     UsageSnapshot {

@@ -6,9 +6,14 @@ use std::time::Duration;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, State, Window, WindowEvent};
-use usage::{build_error_snapshot, build_loading_snapshot, fetch_usage_snapshot, UsageSnapshot};
+use usage::{
+    build_error_snapshot, build_loading_snapshot, fetch_usage_snapshot, UsageSnapshot,
+    TRAY_LOADING_TITLE,
+};
 
 const POLL_SECONDS: u64 = 60;
+const TRAY_ID: &str = "main";
+const TRAY_TOOLTIP: &str = "Codem";
 
 struct SharedState {
     client: reqwest::Client,
@@ -67,12 +72,12 @@ fn configure_tray(app: &mut tauri::App) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, "quit", "Quit Codem", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &refresh, &quit])?;
 
-    TrayIconBuilder::with_id("main")
+    TrayIconBuilder::with_id(TRAY_ID)
         .icon(tray_icon())
         .menu(&menu)
         .show_menu_on_left_click(true)
-        .title("Codem --")
-        .tooltip("Codem")
+        .title(TRAY_LOADING_TITLE)
+        .tooltip(TRAY_TOOLTIP)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => show_main_window(app),
             "refresh" => {
@@ -101,25 +106,27 @@ fn start_polling(app: AppHandle) {
 }
 
 async fn refresh_and_publish(app: &AppHandle) -> UsageSnapshot {
-    let client = app.state::<SharedState>().client.clone();
+    let state = app.state::<SharedState>();
+    let client = state.client.clone();
     let next = match fetch_usage_snapshot(&client).await {
         Ok(snapshot) => snapshot,
         Err(error) => build_error_snapshot(error),
     };
 
-    {
-        let state = app.state::<SharedState>();
-        let mut snapshot = state.snapshot.lock().expect("snapshot lock poisoned");
-        *snapshot = next.clone();
-    }
+    store_snapshot(&state, next.clone());
 
     update_tray(app, &next);
     let _ = app.emit("usage://updated", &next);
     next
 }
 
+fn store_snapshot(state: &SharedState, next: UsageSnapshot) {
+    let mut snapshot = state.snapshot.lock().expect("snapshot lock poisoned");
+    *snapshot = next;
+}
+
 fn update_tray(app: &AppHandle, snapshot: &UsageSnapshot) {
-    if let Some(tray) = app.tray_by_id("main") {
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
         let tooltip = snapshot.tooltip();
         let _ = tray.set_title(Some(snapshot.tray_title.as_str()));
         let _ = tray.set_tooltip(Some(tooltip.as_str()));

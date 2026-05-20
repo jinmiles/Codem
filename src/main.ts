@@ -39,17 +39,21 @@ const app = root;
 let snapshot: UsageSnapshot | null = null;
 let refreshing = false;
 
+const APP_NAME = 'Codem';
+const APP_TAGLINE = 'Codex + meter';
+const LOADING_TITLE = 'Loading';
+const ERROR_TITLE = 'Codem ERR';
+const UNKNOWN_VALUE = 'unknown';
+
+const LEVEL_LABELS: Record<UsageLevel, string> = {
+  ok: 'OK',
+  warning: 'Warning',
+  critical: 'Critical',
+  depleted: 'Depleted',
+};
+
 function levelLabel(level: UsageLevel): string {
-  switch (level) {
-    case 'ok':
-      return 'OK';
-    case 'warning':
-      return 'Warning';
-    case 'critical':
-      return 'Critical';
-    case 'depleted':
-      return 'Depleted';
-  }
+  return LEVEL_LABELS[level];
 }
 
 function formatCountdown(seconds: number): string {
@@ -80,15 +84,25 @@ function formatUpdatedAt(updatedAtUnix: number | null): string {
   });
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function renderWindow(window: UsageWindow, updatedAtUnix: number | null): string {
   const percent = Math.max(0, Math.min(100, window.usedPercent));
+  const label = escapeHtml(window.label);
   return `
     <section class="usage-card usage-card--${window.state}">
       <div class="usage-card__header">
-        <span>${window.label}</span>
+        <span>${label}</span>
         <strong>${percent}%</strong>
       </div>
-      <div class="meter" aria-label="${window.label} usage">
+      <div class="meter" aria-label="${label} usage">
         <span style="width: ${percent}%"></span>
       </div>
       <div class="usage-card__footer">
@@ -99,72 +113,84 @@ function renderWindow(window: UsageWindow, updatedAtUnix: number | null): string
   `;
 }
 
+function renderTopbar(title: string): string {
+  return `
+    <header class="topbar">
+      <div>
+        <h1>${APP_NAME}</h1>
+        <p>${APP_TAGLINE}</p>
+      </div>
+      <span class="pill">${escapeHtml(title)}</span>
+    </header>
+  `;
+}
+
+function renderDetails(snapshot: UsageSnapshot): string {
+  const account = snapshot.account;
+  const accountStatus =
+    account?.allowed === false ? 'Rate Limited' : snapshot.status === 'ready' ? 'Active' : 'Error';
+
+  return `
+    <section class="details">
+      <div>
+        <span>Account</span>
+        <strong>${escapeHtml(account?.email ?? UNKNOWN_VALUE)}</strong>
+      </div>
+      <div>
+        <span>Plan</span>
+        <strong>${escapeHtml(account?.planType?.toUpperCase() ?? UNKNOWN_VALUE)}</strong>
+      </div>
+      <div>
+        <span>Status</span>
+        <strong>${accountStatus}</strong>
+      </div>
+      <div>
+        <span>Updated</span>
+        <strong>${formatUpdatedAt(snapshot.updatedAtUnix)}</strong>
+      </div>
+    </section>
+  `;
+}
+
+function renderShell(title: string, body: string): void {
+  app.innerHTML = `
+    <section class="shell">
+      ${renderTopbar(title)}
+      ${body}
+    </section>
+  `;
+}
+
 function render(): void {
   if (!snapshot || snapshot.status === 'loading') {
-    app.innerHTML = `
-      <section class="shell">
-        <header class="topbar">
-          <div>
-            <h1>Codem</h1>
-            <p>Codex + meter</p>
-          </div>
-          <span class="pill">Loading</span>
-        </header>
-        <div class="empty">Loading Codex usage...</div>
-      </section>
-    `;
+    renderShell(LOADING_TITLE, '<div class="empty">Loading Codex usage...</div>');
     return;
   }
 
-  const account = snapshot.account;
-  const isReady = snapshot.status === 'ready' && snapshot.primary && snapshot.secondary;
-  const statusText = snapshot.status === 'ready' ? snapshot.trayTitle : 'Codem ERR';
+  const primary = snapshot.primary;
+  const secondary = snapshot.secondary;
+  const hasUsage = snapshot.status === 'ready' && primary !== null && secondary !== null;
+  const statusText = snapshot.status === 'ready' ? snapshot.trayTitle : ERROR_TITLE;
+  const usageGrid =
+    hasUsage
+      ? `
+        <div class="grid">
+          ${renderWindow(primary, snapshot.updatedAtUnix)}
+          ${renderWindow(secondary, snapshot.updatedAtUnix)}
+        </div>
+      `
+      : `<div class="error">${escapeHtml(snapshot.error ?? 'Unable to load usage.')}</div>`;
+  const body = `
+    ${usageGrid}
 
-  app.innerHTML = `
-    <section class="shell">
-      <header class="topbar">
-        <div>
-          <h1>Codem</h1>
-          <p>Codex + meter</p>
-        </div>
-        <span class="pill">${statusText}</span>
-      </header>
+    ${renderDetails(snapshot)}
 
-      ${
-        isReady
-          ? `
-            <div class="grid">
-              ${renderWindow(snapshot.primary!, snapshot.updatedAtUnix)}
-              ${renderWindow(snapshot.secondary!, snapshot.updatedAtUnix)}
-            </div>
-          `
-          : `<div class="error">${snapshot.error ?? 'Unable to load usage.'}</div>`
-      }
-
-      <section class="details">
-        <div>
-          <span>Account</span>
-          <strong>${account?.email ?? 'unknown'}</strong>
-        </div>
-        <div>
-          <span>Plan</span>
-          <strong>${account?.planType?.toUpperCase() ?? 'unknown'}</strong>
-        </div>
-        <div>
-          <span>Status</span>
-          <strong>${account?.allowed === false ? 'Rate Limited' : snapshot.status === 'ready' ? 'Active' : 'Error'}</strong>
-        </div>
-        <div>
-          <span>Updated</span>
-          <strong>${formatUpdatedAt(snapshot.updatedAtUnix)}</strong>
-        </div>
-      </section>
-
-      <footer class="actions">
-        <button id="refresh" type="button" ${refreshing ? 'disabled' : ''}>${refreshing ? 'Refreshing...' : 'Refresh'}</button>
-      </footer>
-    </section>
+    <footer class="actions">
+      <button id="refresh" type="button" ${refreshing ? 'disabled' : ''}>${refreshing ? 'Refreshing...' : 'Refresh'}</button>
+    </footer>
   `;
+
+  renderShell(statusText, body);
 
   document.querySelector<HTMLButtonElement>('#refresh')?.addEventListener('click', () => {
     void refreshNow();
