@@ -18,6 +18,7 @@ weekly usage from the system tray or macOS menu bar.
 ## Requirements
 
 - Linux with a working system tray/AppIndicator environment, or macOS 12 or later
+- Node.js 20.19 or later for the Electron runtime
 - `~/.codex/auth.json` present
 - Codex CLI logged in so `tokens.access_token` exists in the auth file
 
@@ -40,13 +41,31 @@ Download the asset for your platform from the GitHub Release page:
 - Linux: `.AppImage` or `.deb`
 - macOS: `.dmg`
 
-Release assets are built from the shared Tauri app. The release version is
+Release assets are built from the shared desktop app. The release version is
 encoded in the generated installer names.
 
 ## Build From Source
 
-Install Node.js 20, Rust stable, and the Tauri system dependencies for your
-platform.
+For Ubuntu 20.04, use the Electron runtime. It avoids the newer GLib/WebKitGTK
+requirements from Tauri v2 and runs with the same frontend and usage API logic:
+
+```bash
+npm ci
+npm run electron:probe
+npm run electron
+```
+
+Build Linux Electron packages:
+
+```bash
+npm run electron:build
+```
+
+The generated `.AppImage` and `.deb` files are written to `release/electron/`.
+
+To build the native Tauri app, install Node.js 20.19, Rust stable, and the Tauri
+system dependencies for your platform. On Linux this generally requires Ubuntu
+22.04 or newer, or equivalent GLib/WebKitGTK packages.
 
 Linux build dependencies on Ubuntu:
 
@@ -76,7 +95,19 @@ Run tests:
 
 ```bash
 npm test
+```
+
+Run native Tauri validation where supported:
+
+```bash
+npm run test:tauri
 cargo run --manifest-path src-tauri/Cargo.toml -- --self-test
+```
+
+On Ubuntu 20.04, use the local Electron run check:
+
+```bash
+npm run electron:run-check
 ```
 
 ## Project Structure
@@ -84,6 +115,7 @@ cargo run --manifest-path src-tauri/Cargo.toml -- --self-test
 ```text
 Codem/
 ├── src/                    # Vite TypeScript frontend
+├── electron/               # Electron runtime for Ubuntu-compatible local use
 ├── src-tauri/              # Tauri Rust app
 │   ├── src/lib.rs          # tray, polling, commands
 │   ├── src/main.rs         # app entry point and self-test entry

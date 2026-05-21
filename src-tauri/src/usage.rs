@@ -7,7 +7,7 @@ use reqwest::header::{ACCEPT, USER_AGENT};
 use serde::{Deserialize, Serialize};
 
 const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
-const USER_AGENT_VALUE: &str = "Codem/0.1.0 Tauri";
+const USER_AGENT_VALUE: &str = "Codem/0.1.1 Tauri";
 pub const TRAY_LOADING_TITLE: &str = "Codem --";
 const TRAY_ERROR_TITLE: &str = "Codem ERR";
 const PRIMARY_WINDOW_LABEL: &str = "5H LIMIT";

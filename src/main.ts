@@ -1,5 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 import './styles.css';
 
 type UsageLevel = 'ok' | 'warning' | 'critical' | 'depleted';
@@ -29,6 +27,20 @@ type UsageSnapshot = {
   trayTitle: string;
 };
 
+type UsageUpdatedHandler = (snapshot: UsageSnapshot) => void;
+
+type CodemBridge = {
+  getSnapshot: () => Promise<UsageSnapshot>;
+  refreshNow: () => Promise<UsageSnapshot>;
+  onUsageUpdated: (handler: UsageUpdatedHandler) => Promise<() => void> | (() => void);
+};
+
+declare global {
+  interface Window {
+    codem?: CodemBridge;
+  }
+}
+
 const root = document.querySelector<HTMLDivElement>('#app');
 
 if (!root) {
@@ -51,6 +63,28 @@ const LEVEL_LABELS: Record<UsageLevel, string> = {
   critical: 'Critical',
   depleted: 'Depleted',
 };
+
+async function getBridge(): Promise<CodemBridge> {
+  if (window.codem) {
+    return window.codem;
+  }
+
+  const [{ invoke }, { listen }] = await Promise.all([
+    import('@tauri-apps/api/core'),
+    import('@tauri-apps/api/event'),
+  ]);
+
+  return {
+    getSnapshot: () => invoke<UsageSnapshot>('get_snapshot'),
+    refreshNow: () => invoke<UsageSnapshot>('refresh_now'),
+    onUsageUpdated: async (handler) => {
+      const unlisten = await listen<UsageSnapshot>('usage://updated', (event) => {
+        handler(event.payload);
+      });
+      return unlisten;
+    },
+  };
+}
 
 function levelLabel(level: UsageLevel): string {
   return LEVEL_LABELS[level];
@@ -201,7 +235,8 @@ async function refreshNow(): Promise<void> {
   refreshing = true;
   render();
   try {
-    snapshot = await invoke<UsageSnapshot>('refresh_now');
+    const bridge = await getBridge();
+    snapshot = await bridge.refreshNow();
   } finally {
     refreshing = false;
     render();
@@ -209,11 +244,12 @@ async function refreshNow(): Promise<void> {
 }
 
 async function boot(): Promise<void> {
-  snapshot = await invoke<UsageSnapshot>('get_snapshot');
+  const bridge = await getBridge();
+  snapshot = await bridge.getSnapshot();
   render();
 
-  await listen<UsageSnapshot>('usage://updated', (event) => {
-    snapshot = event.payload;
+  await bridge.onUsageUpdated((next) => {
+    snapshot = next;
     render();
   });
 
