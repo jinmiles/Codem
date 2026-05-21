@@ -19,7 +19,7 @@
     "electron:probe": "node electron/usage.cjs --fetch",
     "electron:run-check": "npm run build && CODEM_RUN_CHECK=1 electron .",
     "electron:self-test": "node electron/usage.cjs",
-    "electron:build": "npm run build && electron-builder --linux AppImage deb",
+    "electron:build": "npm run build && electron-builder --linux AppImage deb --publish never",
     "tauri": "tauri",
     "tauri:build": "tauri build"
   },
