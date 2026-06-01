@@ -42,7 +42,6 @@ const AUTH_PATH    = GLib.get_home_dir() + '/.codex/auth.json';
 const POLL_SECONDS = 60;
 const TICK_SECONDS = 1;
 const BAR_WIDTH_PX = 266;  // must match .codem-bar-outer width in CSS
-const PILL_WIDTH_PX = 112;
 const PILL_LABEL_WIDTH_PX = 32;
 
 // ---------------------------------------------------------------------------
@@ -62,6 +61,7 @@ class CodemIndicator extends PanelMenu.Button {
     _secondarySection: SectionWidgets = null as any;
     _headerSub: any                   = null;
     _headerTimestamp: any             = null;
+    _labelBrand: any                  = null;
     _labelPrimary: any                = null;
     _labelSecondary: any              = null;
     _pill: any                        = null;
@@ -85,7 +85,6 @@ class CodemIndicator extends PanelMenu.Button {
     // -----------------------------------------------------------------------
     _buildPill() {
         this._pill = new St.BoxLayout({ style_class: 'codem-pill', vertical: false, reactive: true });
-        this._pill.set_width(PILL_WIDTH_PX);
         this.add_child(this._pill);
 
         // Symbolic icon — represents a usage monitor / activity
@@ -95,6 +94,13 @@ class CodemIndicator extends PanelMenu.Button {
             y_align: Clutter.ActorAlign.CENTER,
         });
         this._pill.add_child(this._pillIcon);
+
+        this._labelBrand = new St.Label({
+            text: 'Codex',
+            style_class: 'codem-brand',
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._pill.add_child(this._labelBrand);
 
         // 5h percentage
         this._labelPrimary = new St.Label({
@@ -298,6 +304,7 @@ class CodemIndicator extends PanelMenu.Button {
             `background-color:${pillBg};border-radius:100px;padding:2px 10px 2px 7px;`
         );
         this._pillIcon.set_style(`color:${state.fg};`);
+        this._labelBrand.set_style(`color:${state.fg};font-weight:bold;font-size:11px;`);
         this._labelPrimary.set_style(`color:${state.fg};font-weight:bold;font-size:11px;`);
         this._labelSecondary.set_style(`color:${state.fg};font-weight:bold;font-size:11px;opacity:0.7;`);
         this._pillSep.set_style(`color:${state.fg};opacity:0.3;margin:0 4px;font-size:9px;`);
@@ -345,6 +352,7 @@ class CodemIndicator extends PanelMenu.Button {
         this._labelSecondary.set_text('—');
         this._pill.set_style('background-color:#160505;border-radius:100px;padding:2px 10px 2px 7px;');
         this._pillIcon.set_style('color:#f87171;');
+        this._labelBrand.set_style('color:#f87171;font-weight:bold;font-size:11px;');
         this._labelPrimary.set_style('color:#f87171;font-weight:bold;font-size:11px;');
         this._labelSecondary.set_style('color:#f87171;opacity:0.5;font-size:11px;');
         if (this._headerSub) this._headerSub.set_text(`Error: ${msg}`);
