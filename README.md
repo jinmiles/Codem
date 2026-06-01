@@ -25,31 +25,21 @@ macOS, Windows, or other desktop clients to share the same core logic.
 
 - GNOME Shell 3.36 or later
 - `~/.codex/auth.json` present (Codex CLI must be logged in)
-- Optional: Claude Code status line configured to write `~/.claude/codem-usage.json`
+- Optional: logged into Claude Code (`~/.claude/.credentials.json` present) for Claude usage
 
 ## Claude Code Usage
 
-Claude Code exposes subscription rate-limit usage to status line commands after
-the first API response in a session. Codem reads a small local cache at:
+Codem reads the Claude Code OAuth token from `~/.claude/.credentials.json` and
+calls the usage endpoint directly, the same way it does for Codex:
 
-```text
-~/.claude/codem-usage.json
-```
+* Token path: `claudeAiOauth.accessToken`
+* API endpoint: `GET https://api.anthropic.com/api/oauth/usage`
+* Display: 5-hour window (`five_hour`) and weekly window (`seven_day`)
 
-To populate it from this source checkout, add the status line command to
-`~/.claude/settings.json`:
-
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "node /home/user/extra_workdir/Codem/scripts/claude-codem-statusline.js"
-  }
-}
-```
-
-The helper stores only the model display name and the 5-hour / 7-day rate-limit
-percentages and reset times. If Claude Code has not emitted `rate_limits` yet,
+No extra setup is required beyond being logged into Claude Code. Because that
+endpoint rate-limits aggressively when polled, Codem fetches it on a slower
+cadence than Codex (every 5 minutes) and keeps the last value on a transient
+error. If the token is missing or expired (open Claude Code to refresh it),
 Codem leaves the Claude fields blank while continuing to show Codex usage.
 
 ## Installation

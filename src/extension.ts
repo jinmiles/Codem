@@ -2,8 +2,9 @@
  * Codem - Codex Usage Monitor
  * GNOME Shell Extension (TypeScript source, compiled to ES2018)
  *
- * Reads ~/.codex/auth.json, polls the Codex usage API every 60 s, and reads
- * Claude Code rate-limit data from ~/.claude/codem-usage.json.
+ * Polls the Codex usage API (token from ~/.codex/auth.json) every 60 s and the
+ * Claude Code OAuth usage API (token from ~/.claude/.credentials.json) on a
+ * slower cadence, since that endpoint rate-limits aggressively when polled.
  * Displays 5-hour and weekly usage as a top-bar pill with a detailed popup.
  */
 
@@ -31,22 +32,56 @@ type UsageResponse = CodemCore.UsageResponse;
 interface SectionWidgets {
     item: any;
     pctLabel: any;
+    barOuter: any;
     barFill: any;
     countdownLabel: any;
     resetAtLabel: any;
+    pct: number;
+}
+
+// Per-provider widgets and live state. Codex and Claude share the same shape;
+// behavioral differences are kept explicit at each call site (Codex tracks an
+// HTTP `error` state, Claude tracks file `available` state).
+interface Provider {
+    // Pill widgets
+    brand: any;
+    primary: any;
+    secondary: any;
+    sep: any;
+    // Popup widgets
+    primarySection: SectionWidgets;
+    secondarySection: SectionWidgets;
+    account: any;
+    // State
+    data: UsageResponse | null;
+    available: boolean;
+    error: boolean;
+    primaryLeft: number;
+    secondaryLeft: number;
 }
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 const AUTH_PATH          = GLib.get_home_dir() + '/.codex/auth.json';
-const CLAUDE_USAGE_PATH  = GLib.get_home_dir() + '/.claude/codem-usage.json';
+const CLAUDE_CREDS_PATH  = GLib.get_home_dir() + '/.claude/.credentials.json';
 const POLL_SECONDS       = 60;
+// Claude's /api/oauth/usage endpoint rate-limits hard when polled, so it is
+// fetched much less often than Codex.
+const CLAUDE_POLL_SECONDS = 300;
 const TICK_SECONDS       = 1;
-const BAR_WIDTH_PX       = 266;  // must match .codem-bar-outer width in CSS
 const MUTED_COLOR        = '#6e7681';
 const ERROR_COLOR        = '#f87171';
 const PILL_PADDING_STYLE = 'border-radius:100px;padding:1px 8px 1px 6px;';
+
+function makeProvider(): Provider {
+    return {
+        brand: null, primary: null, secondary: null, sep: null,
+        primarySection: null as any, secondarySection: null as any, account: null,
+        data: null, available: false, error: false,
+        primaryLeft: 0, secondaryLeft: 0,
+    };
+}
 
 // ---------------------------------------------------------------------------
 // Indicator
@@ -55,39 +90,25 @@ const CodemIndicator = GObject.registerClass(
 class CodemIndicator extends PanelMenu.Button {
 
     // class-level field declarations for TypeScript
-    _codexData: UsageResponse | null        = null;
-    _claudeData: UsageResponse | null       = null;
-    _codexError: boolean                    = false;
-    _claudeAvailable: boolean               = false;
-    _pollTimer: number | null               = null;
-    _tickTimer: number | null               = null;
-    _session: any                           = null;
-    _codexPrimaryLeft: number               = 0;
-    _codexSecondaryLeft: number             = 0;
-    _claudePrimaryLeft: number              = 0;
-    _claudeSecondaryLeft: number            = 0;
-    _codexPrimarySection: SectionWidgets    = null as any;
-    _codexSecondarySection: SectionWidgets  = null as any;
-    _claudePrimarySection: SectionWidgets   = null as any;
-    _claudeSecondarySection: SectionWidgets = null as any;
-    _codexAccountSub: any                   = null;
-    _claudeAccountSub: any                  = null;
-    _headerTimestamp: any                   = null;
-    _labelCodexBrand: any                   = null;
-    _labelCodexPrimary: any                 = null;
-    _labelCodexSecondary: any               = null;
-    _labelClaudeBrand: any                  = null;
-    _labelClaudePrimary: any                = null;
-    _labelClaudeSecondary: any              = null;
-    _pill: any                              = null;
-    _pillIcon: any                          = null;
-    _codexPillSep: any                      = null;
-    _claudePillSep: any                     = null;
-    _providerSep: any                       = null;
-    _destroyed: boolean                     = false;
+    _codex: Provider           = null as any;
+    _claude: Provider          = null as any;
+    _providers: Provider[]     = [];
+    _pollTimer: number | null       = null;
+    _claudePollTimer: number | null = null;
+    _tickTimer: number | null       = null;
+    _session: any              = null;
+    _headerTimestamp: any      = null;
+    _pill: any                 = null;
+    _pillIcon: any             = null;
+    _providerSep: any          = null;
+    _destroyed: boolean        = false;
 
     _init() {
         super._init(0.0, 'Codem', false);
+
+        this._codex = makeProvider();
+        this._claude = makeProvider();
+        this._providers = [this._codex, this._claude];
 
         this._buildPill();
         this._buildPopup();
@@ -112,36 +133,7 @@ class CodemIndicator extends PanelMenu.Button {
         });
         this._pill.add_child(this._pillIcon);
 
-        this._labelCodexBrand = new St.Label({
-            text: 'Codex',
-            style_class: 'codem-brand',
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        this._pill.add_child(this._labelCodexBrand);
-
-        // 5h percentage
-        this._labelCodexPrimary = new St.Label({
-            text: '—',
-            style_class: 'codem-label',
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        this._pill.add_child(this._labelCodexPrimary);
-
-        // Separator
-        this._codexPillSep = new St.Label({
-            text: '·',
-            style_class: 'codem-sep',
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        this._pill.add_child(this._codexPillSep);
-
-        // Weekly percentage
-        this._labelCodexSecondary = new St.Label({
-            text: '—',
-            style_class: 'codem-label',
-            y_align: Clutter.ActorAlign.CENTER,
-        });
-        this._pill.add_child(this._labelCodexSecondary);
+        this._buildPillGroup(this._codex, 'Codex');
 
         this._providerSep = new St.Label({
             text: '•',
@@ -150,33 +142,38 @@ class CodemIndicator extends PanelMenu.Button {
         });
         this._pill.add_child(this._providerSep);
 
-        this._labelClaudeBrand = new St.Label({
-            text: 'Claude',
+        this._buildPillGroup(this._claude, 'Claude');
+    }
+
+    // Brand + 5h% + separator + weekly% for one provider, appended in order.
+    _buildPillGroup(p: Provider, brandText: string) {
+        p.brand = new St.Label({
+            text: brandText,
             style_class: 'codem-brand',
             y_align: Clutter.ActorAlign.CENTER,
         });
-        this._pill.add_child(this._labelClaudeBrand);
+        this._pill.add_child(p.brand);
 
-        this._labelClaudePrimary = new St.Label({
+        p.primary = new St.Label({
             text: '—',
             style_class: 'codem-label',
             y_align: Clutter.ActorAlign.CENTER,
         });
-        this._pill.add_child(this._labelClaudePrimary);
+        this._pill.add_child(p.primary);
 
-        this._claudePillSep = new St.Label({
+        p.sep = new St.Label({
             text: '·',
             style_class: 'codem-sep',
             y_align: Clutter.ActorAlign.CENTER,
         });
-        this._pill.add_child(this._claudePillSep);
+        this._pill.add_child(p.sep);
 
-        this._labelClaudeSecondary = new St.Label({
+        p.secondary = new St.Label({
             text: '—',
             style_class: 'codem-label',
             y_align: Clutter.ActorAlign.CENTER,
         });
-        this._pill.add_child(this._labelClaudeSecondary);
+        this._pill.add_child(p.secondary);
     }
 
     // -----------------------------------------------------------------------
@@ -217,39 +214,32 @@ class CodemIndicator extends PanelMenu.Button {
         this.menu.addMenuItem(topItem);
 
         // ── Usage sections (no separators) ──
-        this._codexPrimarySection = this._makeSectionItem('CODEX 5H LIMIT');
-        this.menu.addMenuItem(this._codexPrimarySection.item);
-
-        this._codexSecondarySection = this._makeSectionItem('CODEX WEEKLY LIMIT');
-        this.menu.addMenuItem(this._codexSecondarySection.item);
-
-        this._claudePrimarySection = this._makeSectionItem('CLAUDE 5H LIMIT');
-        this.menu.addMenuItem(this._claudePrimarySection.item);
-
-        this._claudeSecondarySection = this._makeSectionItem('CLAUDE WEEKLY LIMIT');
-        this.menu.addMenuItem(this._claudeSecondarySection.item);
+        this._buildProviderSections(this._codex,  'CODEX 5H LIMIT',  'CODEX WEEKLY LIMIT');
+        this._buildProviderSections(this._claude, 'CLAUDE 5H LIMIT', 'CLAUDE WEEKLY LIMIT');
 
         // ── Account info at bottom ──
-        const accountItem = new PopupMenu.PopupBaseMenuItem({ reactive: false });
-        this._codexAccountSub = new St.Label({
-            text: 'Codex: loading...',
-            style_class: 'codem-account-info',
-        });
-        accountItem.add_child(this._codexAccountSub);
-        this.menu.addMenuItem(accountItem);
+        this._buildProviderAccount(this._codex,  'Codex: loading...');
+        this._buildProviderAccount(this._claude, 'Claude: loading...');
+    }
 
-        const claudeAccountItem = new PopupMenu.PopupBaseMenuItem({ reactive: false });
-        this._claudeAccountSub = new St.Label({
-            text: `Claude: waiting for ${CLAUDE_USAGE_PATH}`,
-            style_class: 'codem-account-info',
-        });
-        claudeAccountItem.add_child(this._claudeAccountSub);
-        this.menu.addMenuItem(claudeAccountItem);
+    _buildProviderSections(p: Provider, primaryTitle: string, secondaryTitle: string) {
+        p.primarySection = this._makeSectionItem(primaryTitle);
+        this.menu.addMenuItem(p.primarySection.item);
+
+        p.secondarySection = this._makeSectionItem(secondaryTitle);
+        this.menu.addMenuItem(p.secondarySection.item);
+    }
+
+    _buildProviderAccount(p: Provider, initialText: string) {
+        const item = new PopupMenu.PopupBaseMenuItem({ reactive: false });
+        p.account = new St.Label({ text: initialText, style_class: 'codem-account-info' });
+        item.add_child(p.account);
+        this.menu.addMenuItem(item);
     }
 
     _refreshUsage(showLoading: boolean) {
         if (showLoading) this._setCodexLoading();
-        this._readClaudeUsage();
+        this._fetchClaudeUsage();
         this._fetchUsage();
     }
 
@@ -280,8 +270,8 @@ class CodemIndicator extends PanelMenu.Button {
         titleRow.add_child(pctLabel);
         box.add_child(titleRow);
 
-        // Progress bar: fixed-width outer track + inner fill
-        const barOuter = new St.Widget({ style_class: 'codem-bar-outer' });
+        // Progress bar: full-width outer track + colored fill sized via set_width()
+        const barOuter = new St.Widget({ style_class: 'codem-bar-outer', x_expand: true });
         const barFill  = new St.Widget({ style_class: 'codem-bar-fill' });
         barOuter.add_child(barFill);
         box.add_child(barOuter);
@@ -295,7 +285,21 @@ class CodemIndicator extends PanelMenu.Button {
         box.add_child(infoRow);
 
         item.add_child(box);
-        return { item, pctLabel, barFill, countdownLabel, resetAtLabel };
+
+        const widgets: SectionWidgets = { item, pctLabel, barOuter, barFill, countdownLabel, resetAtLabel, pct: 0 };
+        // Keep the fill in sync with the track's real allocated width so it fills
+        // exactly to the end at 100%, regardless of theme padding or popup width.
+        // The track's width is 0 until the popup is first laid out.
+        barOuter.connect('notify::width', () => this._applyBarFill(widgets));
+        return widgets;
+    }
+
+    _applyBarFill(section: SectionWidgets) {
+        const trackWidth = section.barOuter.get_width();
+        const fillPx = trackWidth > 0
+            ? Math.max(2, Math.round((section.pct / 100) * trackWidth))
+            : 2;
+        section.barFill.set_width(fillPx);
     }
 
     // -----------------------------------------------------------------------
@@ -307,9 +311,9 @@ class CodemIndicator extends PanelMenu.Button {
     }
 
     _setCodexLoading() {
-        this._codexError = false;
-        this._labelCodexPrimary.set_text('—');
-        this._labelCodexSecondary.set_text('—');
+        this._codex.error = false;
+        this._codex.primary.set_text('—');
+        this._codex.secondary.set_text('—');
         this._updatePillStyles();
     }
 
@@ -338,8 +342,8 @@ class CodemIndicator extends PanelMenu.Button {
                     this._setCodexError('unexpected response');
                     return;
                 }
-                this._codexData = data;
-                this._codexError = false;
+                this._codex.data = data;
+                this._codex.error = false;
                 this._onCodexDataReceived(data);
             } catch (e: any) {
                 this._setCodexError(`parse: ${e.message}`);
@@ -361,29 +365,62 @@ class CodemIndicator extends PanelMenu.Button {
         return JSON.parse(text);
     }
 
-    _readClaudeUsage() {
+    _fetchClaudeUsage() {
         if (this._destroyed) return;
 
-        const file = Gio.File.new_for_path(CLAUDE_USAGE_PATH);
+        const file = Gio.File.new_for_path(CLAUDE_CREDS_PATH);
         if (!file.query_exists(null)) {
-            this._setClaudeUnavailable(`Claude: waiting for ${CLAUDE_USAGE_PATH}`);
+            this._setClaudeUnavailable('Claude: not logged in');
             return;
         }
 
+        let oauth: any;
         try {
-            const rawData = this._readJsonFile(CLAUDE_USAGE_PATH) as CodemCore.ClaudeStatusData;
-            const nowSeconds = Math.floor(Date.now() / 1000);
-            const data = CodemCore.normalizeClaudeStatus(rawData, nowSeconds);
-            if (!data) {
-                this._setClaudeUnavailable('Claude: no rate_limits yet');
-                return;
-            }
-            this._claudeData = data;
-            this._claudeAvailable = true;
-            this._onClaudeDataReceived(data);
+            const creds = this._readJsonFile(CLAUDE_CREDS_PATH);
+            oauth = creds && creds.claudeAiOauth;
         } catch (e: any) {
             this._setClaudeUnavailable(`Claude: ${e.message}`);
+            return;
         }
+
+        const token = oauth && oauth.accessToken;
+        if (!token) { this._setClaudeUnavailable('Claude: no access token'); return; }
+        if (oauth.expiresAt && Date.now() > oauth.expiresAt) {
+            if (!this._claude.data) this._setClaudeUnavailable('Claude: token expired (open Claude Code)');
+            return;
+        }
+
+        const message = Soup.Message.new('GET', CodemCore.CLAUDE_USAGE_URL);
+        message.request_headers.replace('Authorization',     `Bearer ${token}`);
+        message.request_headers.replace('anthropic-beta',    'oauth-2025-04-20');
+        message.request_headers.replace('anthropic-version', '2023-06-01');
+        message.request_headers.replace('User-Agent',        'Codem/1.0');
+
+        this._session.queue_message(message, (_sess: any, msg: any) => {
+            if (this._destroyed) return;
+
+            try {
+                // The usage endpoint rate-limits hard; on a transient error keep
+                // the last value if we have one instead of blanking the display.
+                if (msg.status_code !== 200) {
+                    if (!this._claude.data) this._setClaudeUnavailable(`Claude: HTTP ${msg.status_code}`);
+                    else log(`[Codem] Claude usage HTTP ${msg.status_code} (keeping last value)`);
+                    return;
+                }
+                const raw = JSON.parse(msg.response_body.data);
+                const nowSeconds = Math.floor(Date.now() / 1000);
+                const data = CodemCore.normalizeClaudeUsage(raw, nowSeconds, oauth.subscriptionType);
+                if (!data) {
+                    if (!this._claude.data) this._setClaudeUnavailable('Claude: unexpected response');
+                    return;
+                }
+                this._claude.data = data;
+                this._claude.available = true;
+                this._onClaudeDataReceived(data);
+            } catch (e: any) {
+                if (!this._claude.data) this._setClaudeUnavailable(`Claude: ${e.message}`);
+            }
+        });
     }
 
     // -----------------------------------------------------------------------
@@ -395,11 +432,14 @@ class CodemIndicator extends PanelMenu.Button {
         const sw = rl.secondary_window;
         if (!pw || !sw) { this._setCodexError('unexpected response'); return; }
 
-        this._codexPrimaryLeft   = pw.reset_after_seconds;
-        this._codexSecondaryLeft = sw.reset_after_seconds;
-        this._updatePill();
-        this._updateCodexPopup(data, pw, sw);
-        this._setUpdatedNow();
+        const plan    = data.plan_type || 'unknown';
+        const email   = data.email     || 'unknown';
+        const allowed = data.rate_limit && data.rate_limit.allowed;
+        this._codex.account.set_text(
+            `Codex: ${email}  ·  ${plan.toUpperCase()}  ·  ${allowed ? 'Active' : 'Rate Limited'}`
+        );
+
+        this._applyProviderWindows(this._codex, pw, sw);
     }
 
     _onClaudeDataReceived(data: UsageResponse) {
@@ -408,27 +448,37 @@ class CodemIndicator extends PanelMenu.Button {
         const sw = rl.secondary_window;
         if (!pw || !sw) { this._setClaudeUnavailable('Claude: unexpected response'); return; }
 
-        this._claudePrimaryLeft   = pw.reset_after_seconds;
-        this._claudeSecondaryLeft = sw.reset_after_seconds;
+        const plan = data.plan_type || 'Claude Code';
+        const allowed = data.rate_limit && data.rate_limit.allowed;
+        this._claude.account.set_text(
+            `Claude: ${plan}  ·  ${allowed ? 'Active' : 'Rate Limited'}`
+        );
+
+        this._applyProviderWindows(this._claude, pw, sw);
+    }
+
+    // Shared on-data path: refresh countdown anchors, pill, popup sections, and
+    // the last-updated timestamp.
+    _applyProviderWindows(p: Provider, pw: WindowData, sw: WindowData) {
+        p.primaryLeft   = pw.reset_after_seconds;
+        p.secondaryLeft = sw.reset_after_seconds;
         this._updatePill();
-        this._updateClaudePopup(data, pw, sw);
+        this._updateSection(p.primarySection,   pw);
+        this._updateSection(p.secondarySection, sw);
         this._setUpdatedNow();
     }
 
     _updatePill() {
-        if (this._codexData) {
-            const rl = this._codexData.rate_limit;
-            this._labelCodexPrimary.set_text(this._formatPct(rl.primary_window.used_percent));
-            this._labelCodexSecondary.set_text(this._formatPct(rl.secondary_window.used_percent));
-        }
-
-        if (this._claudeData && this._claudeAvailable) {
-            const rl = this._claudeData.rate_limit;
-            this._labelClaudePrimary.set_text(this._formatPct(rl.primary_window.used_percent));
-            this._labelClaudeSecondary.set_text(this._formatPct(rl.secondary_window.used_percent));
-        }
-
+        this._refreshPillLabels(this._codex,  !!this._codex.data);
+        this._refreshPillLabels(this._claude, !!this._claude.data && this._claude.available);
         this._updatePillStyles();
+    }
+
+    _refreshPillLabels(p: Provider, show: boolean) {
+        if (!show || !p.data) return;
+        const rl = p.data.rate_limit;
+        p.primary.set_text(this._formatPct(rl.primary_window.used_percent));
+        p.secondary.set_text(this._formatPct(rl.secondary_window.used_percent));
     }
 
     _updatePillStyles() {
@@ -442,32 +492,18 @@ class CodemIndicator extends PanelMenu.Button {
         this._pillIcon.set_style(`color:${state.fg};`);
         this._providerSep.set_style(`color:${state.fg};opacity:0.35;margin:0 5px;font-size:10px;`);
 
-        this._styleProviderPill(
-            this._labelCodexBrand,
-            this._labelCodexPrimary,
-            this._labelCodexSecondary,
-            this._codexPillSep,
-            this._codexData,
-            this._codexError
-        );
-        this._styleProviderPill(
-            this._labelClaudeBrand,
-            this._labelClaudePrimary,
-            this._labelClaudeSecondary,
-            this._claudePillSep,
-            this._claudeAvailable ? this._claudeData : null,
-            false
-        );
+        this._styleProviderPill(this._codex,  this._codex.data, this._codex.error);
+        this._styleProviderPill(this._claude, this._claude.available ? this._claude.data : null, false);
     }
 
-    _styleProviderPill(brand: any, primary: any, secondary: any, sep: any, data: UsageResponse | null, error: boolean) {
+    _styleProviderPill(p: Provider, data: UsageResponse | null, error: boolean) {
         const color = error ? ERROR_COLOR : data ? CodemCore.getColorState(this._providerUsagePercent(data)).fg : MUTED_COLOR;
         const labelOpacity = data || error ? 1 : 0.65;
 
-        brand.set_style(`color:${color};font-weight:bold;font-size:11px;`);
-        primary.set_style(`color:${color};font-weight:bold;font-size:11px;opacity:${labelOpacity};`);
-        secondary.set_style(`color:${color};font-weight:bold;font-size:11px;opacity:${data ? 0.7 : 0.5};`);
-        sep.set_style(`color:${color};opacity:0.35;margin:0 2px;font-size:9px;`);
+        p.brand.set_style(`color:${color};font-weight:bold;font-size:11px;`);
+        p.primary.set_style(`color:${color};font-weight:bold;font-size:11px;opacity:${labelOpacity};`);
+        p.secondary.set_style(`color:${color};font-weight:bold;font-size:11px;opacity:${data ? 0.7 : 0.5};`);
+        p.sep.set_style(`color:${color};opacity:0.35;margin:0 2px;font-size:9px;`);
     }
 
     _providerUsagePercent(data: UsageResponse): number {
@@ -476,9 +512,9 @@ class CodemIndicator extends PanelMenu.Button {
     }
 
     _maxKnownUsagePercent(): number {
-        let pct = this._codexError ? 100 : 0;
-        if (this._codexData) pct = Math.max(pct, this._providerUsagePercent(this._codexData));
-        if (this._claudeData && this._claudeAvailable) pct = Math.max(pct, this._providerUsagePercent(this._claudeData));
+        let pct = this._codex.error ? 100 : 0;
+        if (this._codex.data) pct = Math.max(pct, this._providerUsagePercent(this._codex.data));
+        if (this._claude.data && this._claude.available) pct = Math.max(pct, this._providerUsagePercent(this._claude.data));
         return pct;
     }
 
@@ -486,40 +522,15 @@ class CodemIndicator extends PanelMenu.Button {
         return `${Math.round(pct)}%`;
     }
 
-    _updateCodexPopup(data: UsageResponse, pw: WindowData, sw: WindowData) {
-        const plan    = data.plan_type || 'unknown';
-        const email   = data.email     || 'unknown';
-        const allowed = data.rate_limit && data.rate_limit.allowed;
-
-        this._updateSection(this._codexPrimarySection,   pw);
-        this._updateSection(this._codexSecondarySection, sw);
-
-        this._codexAccountSub.set_text(
-            `Codex: ${email}  ·  ${plan.toUpperCase()}  ·  ${allowed ? 'Active' : 'Rate Limited'}`
-        );
-    }
-
-    _updateClaudePopup(data: UsageResponse, pw: WindowData, sw: WindowData) {
-        const plan = data.plan_type || 'Claude Code';
-        const allowed = data.rate_limit && data.rate_limit.allowed;
-
-        this._updateSection(this._claudePrimarySection,   pw);
-        this._updateSection(this._claudeSecondarySection, sw);
-
-        this._claudeAccountSub.set_text(
-            `Claude: ${plan}  ·  ${allowed ? 'Active' : 'Rate Limited'}`
-        );
-    }
-
     _updateSection(section: SectionWidgets, win: WindowData) {
         const pct    = win.used_percent;
         const state  = CodemCore.getColorState(pct);
-        const fillPx = Math.max(2, Math.round((pct / 100) * BAR_WIDTH_PX));
 
         section.pctLabel.set_text(this._formatPct(pct));
         section.pctLabel.set_style(`color:${state.bg};font-weight:bold;font-size:14px;`);
 
-        section.barFill.set_width(fillPx);
+        section.pct = pct;
+        this._applyBarFill(section);
         section.barFill.set_style(`background-color:${state.bg};border-radius:2px;height:4px;`);
 
         section.countdownLabel.set_text(`Resets in ${CodemCore.formatCountdown(win.reset_after_seconds)}`);
@@ -529,6 +540,7 @@ class CodemIndicator extends PanelMenu.Button {
     _setSectionUnavailable(section: SectionWidgets, message: string) {
         section.pctLabel.set_text('---%');
         section.pctLabel.set_style(`color:${MUTED_COLOR};font-weight:bold;font-size:14px;`);
+        section.pct = 0;
         section.barFill.set_width(2);
         section.barFill.set_style(`background-color:${MUTED_COLOR};border-radius:2px;height:4px;`);
         section.countdownLabel.set_text(message);
@@ -536,24 +548,24 @@ class CodemIndicator extends PanelMenu.Button {
     }
 
     _setClaudeUnavailable(msg: string) {
-        this._claudeAvailable = false;
-        this._labelClaudePrimary.set_text('—');
-        this._labelClaudeSecondary.set_text('—');
-        this._setSectionUnavailable(this._claudePrimarySection, 'Waiting for status line');
-        this._setSectionUnavailable(this._claudeSecondarySection, 'Waiting for status line');
-        if (this._claudeAccountSub) this._claudeAccountSub.set_text(msg);
+        this._claude.available = false;
+        this._claude.primary.set_text('—');
+        this._claude.secondary.set_text('—');
+        this._setSectionUnavailable(this._claude.primarySection, 'Waiting for status line');
+        this._setSectionUnavailable(this._claude.secondarySection, 'Waiting for status line');
+        if (this._claude.account) this._claude.account.set_text(msg);
         this._updatePillStyles();
     }
 
     _setCodexError(msg: string) {
         if (this._destroyed) return;
 
-        this._codexError = true;
-        this._labelCodexPrimary.set_text('ERR');
-        this._labelCodexSecondary.set_text('—');
-        this._setSectionUnavailable(this._codexPrimarySection, 'Codex error');
-        this._setSectionUnavailable(this._codexSecondarySection, 'Codex error');
-        if (this._codexAccountSub) this._codexAccountSub.set_text(`Codex error: ${msg}`);
+        this._codex.error = true;
+        this._codex.primary.set_text('ERR');
+        this._codex.secondary.set_text('—');
+        this._setSectionUnavailable(this._codex.primarySection, 'Codex error');
+        this._setSectionUnavailable(this._codex.secondarySection, 'Codex error');
+        if (this._codex.account) this._codex.account.set_text(`Codex error: ${msg}`);
         if (this._headerTimestamp) this._headerTimestamp.set_text('Updated: —');
         this._updatePillStyles();
         log(`[Codem] Error: ${msg}`);
@@ -565,7 +577,12 @@ class CodemIndicator extends PanelMenu.Button {
     _startPolling() {
         this._pollTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, POLL_SECONDS, () => {
             if (this._destroyed) return GLib.SOURCE_REMOVE;
-            this._refreshUsage(false);
+            this._fetchUsage();
+            return GLib.SOURCE_CONTINUE;
+        });
+        this._claudePollTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, CLAUDE_POLL_SECONDS, () => {
+            if (this._destroyed) return GLib.SOURCE_REMOVE;
+            this._fetchClaudeUsage();
             return GLib.SOURCE_CONTINUE;
         });
     }
@@ -573,35 +590,31 @@ class CodemIndicator extends PanelMenu.Button {
     _startTick() {
         this._tickTimer = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, TICK_SECONDS, () => {
             if (this._destroyed) return GLib.SOURCE_REMOVE;
-            if (this._codexPrimaryLeft   > 0) this._codexPrimaryLeft--;
-            if (this._codexSecondaryLeft > 0) this._codexSecondaryLeft--;
-            if (this._claudePrimaryLeft   > 0) this._claudePrimaryLeft--;
-            if (this._claudeSecondaryLeft > 0) this._claudeSecondaryLeft--;
+            for (const p of this._providers) {
+                if (p.primaryLeft   > 0) p.primaryLeft--;
+                if (p.secondaryLeft > 0) p.secondaryLeft--;
+            }
             if (this.menu.isOpen) {
-                if (this._codexData && !this._codexError) {
-                    this._codexPrimarySection.countdownLabel.set_text(
-                        `Resets in ${CodemCore.formatCountdown(this._codexPrimaryLeft)}`
-                    );
-                    this._codexSecondarySection.countdownLabel.set_text(
-                        `Resets in ${CodemCore.formatCountdown(this._codexSecondaryLeft)}`
-                    );
-                }
-                if (this._claudeData && this._claudeAvailable) {
-                    this._claudePrimarySection.countdownLabel.set_text(
-                        `Resets in ${CodemCore.formatCountdown(this._claudePrimaryLeft)}`
-                    );
-                    this._claudeSecondarySection.countdownLabel.set_text(
-                        `Resets in ${CodemCore.formatCountdown(this._claudeSecondaryLeft)}`
-                    );
-                }
+                if (this._codex.data && !this._codex.error) this._refreshProviderCountdowns(this._codex);
+                if (this._claude.data && this._claude.available) this._refreshProviderCountdowns(this._claude);
             }
             return GLib.SOURCE_CONTINUE;
         });
     }
 
+    _refreshProviderCountdowns(p: Provider) {
+        p.primarySection.countdownLabel.set_text(
+            `Resets in ${CodemCore.formatCountdown(p.primaryLeft)}`
+        );
+        p.secondarySection.countdownLabel.set_text(
+            `Resets in ${CodemCore.formatCountdown(p.secondaryLeft)}`
+        );
+    }
+
     _stopTimers() {
-        if (this._pollTimer)  { GLib.source_remove(this._pollTimer);  this._pollTimer  = null; }
-        if (this._tickTimer)  { GLib.source_remove(this._tickTimer);  this._tickTimer  = null; }
+        if (this._pollTimer)       { GLib.source_remove(this._pollTimer);       this._pollTimer       = null; }
+        if (this._claudePollTimer) { GLib.source_remove(this._claudePollTimer); this._claudePollTimer = null; }
+        if (this._tickTimer)       { GLib.source_remove(this._tickTimer);       this._tickTimer       = null; }
     }
 
     destroy() {

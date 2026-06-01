@@ -1,5 +1,6 @@
 namespace CodemCore {
     export const USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
+    export const CLAUDE_USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
     export const FIVE_HOUR_WINDOW_SECONDS = 18000;
     export const WEEKLY_WINDOW_SECONDS = 604800;
 

@@ -26,20 +26,15 @@ namespace CodemCore {
         };
     }
 
-    export interface ClaudeStatusWindow {
-        used_percentage?: number;
-        resets_at?: number;
+    // Shape returned by https://api.anthropic.com/api/oauth/usage
+    export interface ClaudeUsageWindow {
+        utilization?: number;     // 0-100 percentage
+        resets_at?: string | null; // ISO 8601 timestamp
     }
 
-    export interface ClaudeStatusData {
-        updated_at?: number;
-        model?: {
-            display_name?: string;
-        };
-        rate_limits?: {
-            five_hour?: ClaudeStatusWindow;
-            seven_day?: ClaudeStatusWindow;
-        };
+    export interface ClaudeUsageResponse {
+        five_hour?: ClaudeUsageWindow;
+        seven_day?: ClaudeUsageWindow;
     }
 
     export interface ColorState {

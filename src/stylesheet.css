@@ -101,7 +101,8 @@
     color: #3fb950;
 }
 
-/* Progress bar: fixed-width track + colored fill via set_width() */
+/* Progress bar: full-width track (x_expand) + colored fill sized via set_width().
+   The 266px here is just a minimum; the fill is computed from the real width. */
 .codem-bar-outer {
     width: 266px;
     height: 4px;

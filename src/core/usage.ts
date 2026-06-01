@@ -14,19 +14,18 @@ namespace CodemCore {
         );
     }
 
-    export function normalizeClaudeStatus(value: ClaudeStatusData, nowSeconds: number): UsageResponse | null {
-        const rateLimits = value && value.rate_limits;
-        const fiveHour = rateLimits && rateLimits.five_hour;
-        const sevenDay = rateLimits && rateLimits.seven_day;
+    export function normalizeClaudeUsage(value: ClaudeUsageResponse, nowSeconds: number, planType?: string): UsageResponse | null {
+        const fiveHour = value && value.five_hour;
+        const sevenDay = value && value.seven_day;
 
-        if (!isClaudeStatusWindow(fiveHour) || !isClaudeStatusWindow(sevenDay)) return null;
+        if (!isClaudeUsageWindow(fiveHour) || !isClaudeUsageWindow(sevenDay)) return null;
 
-        const primary = claudeWindowToUsageWindow(fiveHour, FIVE_HOUR_WINDOW_SECONDS, nowSeconds);
-        const secondary = claudeWindowToUsageWindow(sevenDay, WEEKLY_WINDOW_SECONDS, nowSeconds);
+        const primary = claudeUsageToWindow(fiveHour, FIVE_HOUR_WINDOW_SECONDS, nowSeconds);
+        const secondary = claudeUsageToWindow(sevenDay, WEEKLY_WINDOW_SECONDS, nowSeconds);
 
         return {
             email: 'Claude',
-            plan_type: (value.model && value.model.display_name) || 'Claude Code',
+            plan_type: claudePlanLabel(planType),
             rate_limit: {
                 allowed: primary.used_percent < 100 && secondary.used_percent < 100,
                 primary_window: primary,
@@ -35,21 +34,29 @@ namespace CodemCore {
         };
     }
 
-    function isClaudeStatusWindow(value: any): value is ClaudeStatusWindow {
-        return !!(
-            value &&
-            typeof value.used_percentage === 'number' &&
-            typeof value.resets_at === 'number'
-        );
+    function isClaudeUsageWindow(value: any): value is ClaudeUsageWindow {
+        return !!(value && typeof value.utilization === 'number');
     }
 
-    function claudeWindowToUsageWindow(win: ClaudeStatusWindow, limitSeconds: number, nowSeconds: number): WindowData {
-        const resetAt = win.resets_at || nowSeconds;
+    function claudeUsageToWindow(win: ClaudeUsageWindow, limitSeconds: number, nowSeconds: number): WindowData {
+        const resetAt = parseResetAt(win.resets_at, nowSeconds);
         return {
-            used_percent: win.used_percentage || 0,
+            used_percent: win.utilization || 0,
             limit_window_seconds: limitSeconds,
             reset_after_seconds: Math.max(0, resetAt - nowSeconds),
             reset_at: resetAt,
         };
+    }
+
+    // The usage endpoint returns ISO 8601 reset times; convert to unix seconds.
+    function parseResetAt(value: string | null | undefined, nowSeconds: number): number {
+        if (!value) return nowSeconds;
+        const ms = Date.parse(value);
+        return Number.isNaN(ms) ? nowSeconds : Math.floor(ms / 1000);
+    }
+
+    function claudePlanLabel(planType?: string): string {
+        if (!planType) return 'Claude Code';
+        return planType.charAt(0).toUpperCase() + planType.slice(1);
     }
 }

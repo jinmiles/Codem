@@ -57,6 +57,24 @@ The expected rate-limit shape is:
 }
 ```
 
+Codem also reads the Claude Code OAuth token and calls the Claude usage endpoint:
+
+* Credentials file: `~/.claude/.credentials.json`
+* Token path: `claudeAiOauth.accessToken`
+* API endpoint: `GET https://api.anthropic.com/api/oauth/usage`
+* Display: 5-hour window (`five_hour`) and weekly window (`seven_day`) usage
+
+That endpoint rate-limits aggressively when polled, so Claude usage is fetched on
+a slower cadence than Codex and the last value is kept on transient errors. The
+expected response shape is:
+
+```json
+{
+  "five_hour": { "utilization": 12.0, "resets_at": "2026-06-01T10:20:00+00:00" },
+  "seven_day": { "utilization": 3.0,  "resets_at": "2026-06-05T10:00:00+00:00" }
+}
+```
+
 ## Repository Structure
 
 ```text
@@ -79,10 +97,10 @@ Codem/
 
 Important paths:
 
-* `src/core/`: platform-neutral Codex usage types, constants, formatting, and
-  response helpers.
-* `src/extension.ts`: GNOME Shell extension integration, local auth reading,
-  API polling, UI, and timers.
+* `src/core/`: platform-neutral Codex and Claude usage types, constants,
+  formatting, and response helpers.
+* `src/extension.ts`: GNOME Shell extension integration, local auth/credential
+  reading, API polling, UI, and timers.
 * `src/metadata.json`: GNOME Shell extension manifest.
 * `src/stylesheet.css`: popup and top-bar styling.
 * `build/extension.js`: generated build output. Do not commit it.
@@ -171,8 +189,9 @@ response.
 * Prefer structured JSON handling and standard APIs over ad hoc parsing.
 * Keep CLI defaults, configuration behavior, README content, and installation
   behavior aligned.
-* Preserve the 60-second API polling cadence and 1-second local countdown tick
-  unless the user explicitly asks to change them.
+* Preserve the 60-second Codex polling cadence, the slower Claude usage polling
+  cadence, and the 1-second local countdown tick unless the user explicitly asks
+  to change them.
 * Remove polling and tick timers in `disable()`.
 
 ## UI And Behavior
@@ -208,7 +227,8 @@ response.
 
 * Do not expose secrets, tokens, credentials, personal data, or proprietary
   assets in code, logs, commits, screenshots, or documentation.
-* Never commit real `~/.codex/auth.json` contents.
+* Never commit real `~/.codex/auth.json` or `~/.claude/.credentials.json`
+  contents, tokens, or live API usage payloads.
 * Use placeholder values in examples.
 * Avoid printing large API payloads or full auth files.
 * Do not make unsupported claims about correctness, safety, performance, or
