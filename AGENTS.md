@@ -143,6 +143,16 @@ If validation cannot be run because GNOME Shell, credentials, network access, or
 the local desktop session is unavailable, mention that clearly in the final
 response.
 
+## Runtime Reload
+
+* After changing extension source, styles, metadata, or installed runtime files,
+  build the extension, sync the changed runtime files into the installed
+  extension directory, and restart the GNOME extension when a local desktop
+  session is available.
+* Restart the extension by disabling and re-enabling
+  `codem@jinmiles.github.io`; do not restart the whole GNOME Shell unless the
+  change specifically requires it.
+
 ## Coding Style
 
 * Always include `'use strict';` in runtime source where applicable.
@@ -211,10 +221,12 @@ Before finishing:
 1. Confirm `git status --short` only shows intended changes, plus any
    pre-existing user modifications.
 2. Run `npm run build` for code changes when feasible.
-3. Update documentation if behavior, setup, interfaces, configuration, or
+3. Restart the installed GNOME extension after extension runtime changes when a
+   local desktop session is available.
+4. Update documentation if behavior, setup, interfaces, configuration, or
    outputs changed.
-4. Mention any validation that could not be run because of missing credentials,
+5. Mention any validation that could not be run because of missing credentials,
    GNOME Shell access, network access, external services, or environment
    constraints.
-5. Ensure no generated artifacts, secrets, or temporary files were accidentally
+6. Ensure no generated artifacts, secrets, or temporary files were accidentally
    added to tracked changes.

@@ -6,8 +6,8 @@
 
 .codem-pill {
     border-radius: 100px;
-    padding: 2px 10px 2px 7px;
-    margin: 4px 2px;
+    padding: 1px 8px 1px 6px;
+    margin: 3px 1px;
     background-color: #0d1117;
     spacing: 0px;
     transition-duration: 200ms;
@@ -17,18 +17,17 @@
 .codem-icon {
     icon-size: 14px;
     color: #6e7681;
-    margin-right: 5px;
+    margin-right: 4px;
 }
 
 .codem-brand {
     font-size: 11px;
     font-weight: bold;
     color: #c9d1d9;
-    margin-right: 5px;
+    margin-right: 4px;
 }
 
 .codem-label {
-    width: 32px;
     font-size: 11px;
     font-weight: bold;
     color: #c9d1d9;
@@ -37,7 +36,13 @@
 .codem-sep {
     font-size: 9px;
     color: rgba(110, 118, 129, 0.4);
-    margin: 0 4px;
+    margin: 0 2px;
+}
+
+.codem-provider-sep {
+    font-size: 10px;
+    color: rgba(110, 118, 129, 0.4);
+    margin: 0 5px;
 }
 
 /* -- Popup top row --------------------------------------------------------- */

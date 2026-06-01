@@ -1,5 +1,7 @@
 namespace CodemCore {
     export const USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
+    export const FIVE_HOUR_WINDOW_SECONDS = 18000;
+    export const WEEKLY_WINDOW_SECONDS = 604800;
 
     export const COLOR_STATES: ColorState[] = [
         { threshold: 60,  bg: '#3fb950', fg: '#3fb950', label: 'ok'       },

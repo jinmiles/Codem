@@ -26,6 +26,22 @@ namespace CodemCore {
         };
     }
 
+    export interface ClaudeStatusWindow {
+        used_percentage?: number;
+        resets_at?: number;
+    }
+
+    export interface ClaudeStatusData {
+        updated_at?: number;
+        model?: {
+            display_name?: string;
+        };
+        rate_limits?: {
+            five_hour?: ClaudeStatusWindow;
+            seven_day?: ClaudeStatusWindow;
+        };
+    }
+
     export interface ColorState {
         threshold: number;
         bg: string;
